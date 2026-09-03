@@ -181,7 +181,7 @@
     margin-right: 0.5rem;
 }
 
-.bundleSelect {
+select.bundleSelect {
     display: inline-block;
     width: auto;
     margin-right: 0.75rem;
@@ -240,4 +240,32 @@
 
 .metricsRow {
     cursor: pointer;
+}
+
+.replayPanel {
+    margin-bottom: 1rem;
+}
+
+.replayPanel h4 {
+    font-size: 1.1rem;
+}
+
+input.replayArmInput {
+    width: 10rem;
+    display: inline-block;
+}
+
+input.replayNumber {
+    width: 5.5rem;
+    display: inline-block;
+}
+
+/* a number input inside an inline-flex control group must not stretch */
+input.replayNumber, input.replayArmInput {
+    flex: none;
+}
+
+.bundleControlGroup .trace-legend-toggle,
+.bundleControlGroup .bundleStepLabel {
+    white-space: nowrap;
 }

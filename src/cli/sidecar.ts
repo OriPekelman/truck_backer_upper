@@ -99,12 +99,12 @@ export function buildSidecar(options: {
 /** Net options as recorded in a sidecar, for a rollout of those weights. */
 export function netOptionsFromSidecar(sidecar: Sidecar): NetOptions {
     let shape = sidecar.net.shape;
-    if (!(shape instanceof Array) || shape.length != 3) {
-        throw new Error("The sidecar's net.shape must be [inputs, hidden, 1]");
+    if (!(shape instanceof Array) || shape.length < 3 || shape[shape.length - 1] != 1) {
+        throw new Error("The sidecar's net.shape must be [inputs, hidden..., 1]");
     }
     let net: NetOptions = {
         inputs: shape[0],
-        hidden: shape[1],
+        hidden: shape.slice(1, shape.length - 1),
         activation: sidecar.net.activation == "logistic" ? "logistic" : "tanh",
         outputMap: sidecar.net.output_map == "2s-1" ? "2s-1" : "tanh"
     };

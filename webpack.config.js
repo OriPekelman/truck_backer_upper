@@ -5,6 +5,18 @@ const Uglify = require("uglifyjs-webpack-plugin");
 
 const production = process.env.NODE_ENV === "production";
 
+// stamped into the bundle so that a rollout replayed in the browser can say
+// which build of this engine drew it, as the CLI's rollouts do
+function repoCommit() {
+	try {
+		return require("child_process")
+			.execFileSync("git", ["-C", __dirname, "rev-parse", "HEAD"], { encoding: "utf8" })
+			.trim();
+	} catch (e) {
+		return "unknown";
+	}
+}
+
 module.exports = {
 	entry: ['./src/main.tsx'],
 	output: {
@@ -14,6 +26,9 @@ module.exports = {
 		extensions: ['.webpack.js', '.web.js', '.ts', '.tsx', '.js'],
 	},
 	plugins: [
+		new webpack.DefinePlugin({
+			__REPO_COMMIT__: JSON.stringify(repoCommit())
+		}),
 		...(production ? [
 			new webpack.DefinePlugin({
 				'process.env': {

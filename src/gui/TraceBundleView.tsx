@@ -3,6 +3,7 @@ import { toDeg } from '../math'
 import { LoadedBundle, LoadedRun, RunOutcome, runOutcomes, parseTraceBundle, traceBundleFormat } from '../model/traceBundle'
 import { TraceOverlay, DisplayRun, RunRef, sameRun } from './TraceOverlay'
 import { MetricsTable, MetricsRow } from './MetricsTable'
+import { ReplayPanel } from './ReplayPanel'
 import { metricsToCsv, runToCsv, runToJson, download } from './exportRuns'
 import { runMetrics } from '../model/metrics'
 
@@ -261,6 +262,31 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
         return copy;
     }
 
+    /**
+     * Rollouts replayed in the browser become bundles like any other, so the
+     * overlay, the filters and the comparison tables need no special case.
+     */
+    private handleReplayed(bundles: any[]) {
+        let loaded: LoadedBundle[] = [];
+        let errors: string[] = [];
+        for (let i = 0; i < bundles.length; i++) {
+            try {
+                loaded.push(parseTraceBundle(bundles[i].provenance.weights, bundles[i]));
+            } catch (e) {
+                errors.push((e instanceof Error ? e.message : "" + e));
+            }
+        }
+        this.stopPlaying();
+        this.setState((state) => ({
+            bundles: state.bundles.concat(loaded),
+            errors: errors,
+            selected: undefined,
+            hovered: undefined,
+            playing: false,
+            time: 0
+        }));
+    }
+
     private handleFilesChosen(e: React.ChangeEvent<HTMLInputElement>) {
         let files = TraceBundleView.toArray(e.currentTarget.files);
         e.currentTarget.value = "";
@@ -378,6 +404,7 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
             return <tr key={index}>
                 <td><span className="bundleSwatch" style={{ backgroundColor: color }}></span>{bundle.provenance.arm}</td>
                 <td>{bundle.provenance.engine}{bundle.provenance.engine_git ? " @ " + bundle.provenance.engine_git.substring(0, 8) : ""}</td>
+                <td>{isFinite(bundle.provenance.train_seed) ? bundle.provenance.train_seed : "-"}</td>
                 <td>{bundle.provenance.net ? bundle.provenance.net.shape.join("-") + " " + bundle.provenance.net.activation : "-"}</td>
                 <td>r={bundle.plant.r}, cap={bundle.plant.step_cap}, dock={bundle.plant.dock_ref}</td>
                 <td>{visible.length} / {bundle.runs.length}</td>
@@ -394,7 +421,7 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
         return <table className="table table-sm bundleTable">
             <thead>
                 <tr>
-                    <th>Arm</th><th>Engine</th><th>Net</th><th>Plant</th><th>Runs shown</th>
+                    <th>Arm</th><th>Engine</th><th>Seed</th><th>Net</th><th>Plant</th><th>Runs shown</th>
                     <th>Docked</th><th>Mean best d²</th><th>Min best d²</th><th>Mean steps</th><th>Summaries</th><th></th>
                 </tr>
             </thead>
@@ -506,6 +533,7 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
                     Nothing is run in the browser here — the picture is what the engine drew.
                 </p>
                 {this.renderLoader()}
+                <ReplayPanel onReplayed={this.handleReplayed.bind(this)} />
                 {this.renderErrors()}
                 {this.renderSummaries()}
                 {this.state.bundles.length > 0 ? this.renderControls() : null}

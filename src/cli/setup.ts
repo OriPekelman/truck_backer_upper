@@ -5,27 +5,20 @@ import { Point, Angle, toRad, toDeg } from '../math';
 import { Truck } from '../model/truck';
 import { Dock } from '../model/world';
 import { PlantConventions, DockReference, AngleWrapping } from '../model/conventions';
-import { NeuralNet, NetConfig, LayerConfig } from '../neuralnet/net';
-import { ActivationFunction, Tanh, Sigmoid, SymmetricSigmoid } from '../neuralnet/activation';
-import { AdalineUnit } from '../neuralnet/unit';
+import { NeuralNet } from '../neuralnet/net';
 import { Optimizer, SGD, SGDNesterovMomentum } from '../neuralnet/optimizers';
-import { WeightInitializer, TwoLayerInitializer, RandomWeightInitializer } from '../neuralnet/weightinitializer';
-import { MSE, ControllerError, TruckControllerError, D2ControllerError, BestApproachD2ControllerError } from '../neuralnet/error';
+import { ControllerError, TruckControllerError, D2ControllerError, BestApproachD2ControllerError } from '../neuralnet/error';
 import { Observation, observationForInputCount } from '../neuralnet/observation';
+import {
+    NetOptions, HiddenActivationName, OutputMapName, Start, StartSchemeName,
+    buildControllerNet as buildNet, buildObservation as buildObs, buildStarts as buildStartSet,
+    applyStart as applyStartToTruck, describeStart as describeStartState, netShape as shapeOf,
+    makeSeededRandom as seededRandom, ensembleStarts as ensemble, pointStarts as point, yardStarts as yard
+} from '../model/replay';
 import { Args } from './args';
 
-export type HiddenActivationName = "tanh" | "logistic";
-export type OutputMapName = "tanh" | "2s-1";
 export type ObjectiveName = "demo" | "d2-terminal" | "d2-best";
-export type StartSchemeName = "curriculum" | "ensemble" | "point" | "yard";
 export type OptimizerName = "nesterov" | "sgd";
-
-export interface NetOptions {
-    inputs: number;
-    hidden: number;
-    activation: HiddenActivationName;
-    outputMap: OutputMapName;
-}
 
 export interface OptimizerOptions {
     name: OptimizerName;
@@ -34,20 +27,12 @@ export interface OptimizerOptions {
 }
 
 export interface StartOptions {
-    scheme: StartSchemeName;
+    scheme: StartSchemeName | "curriculum";
     seed: number;
     count: number;
 }
 
-/** One start state of a rollout or a training sample. */
-export interface Start {
-    x: number;
-    y: number;
-    trailerAngle: Angle;
-    cabinAngle: Angle;
-    scheme: string;
-    idx: number;
-}
+export { NetOptions, Start, HiddenActivationName, OutputMapName, StartSchemeName };
 
 /**
  * A seeded linear congruential generator, so that a run is reproducible from
@@ -57,14 +42,6 @@ export interface Start {
 export function installSeededRandom(seed: number): void {
     let state = (seed >>> 0) || 1;
     Math.random = () => {
-        state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
-        return state / 4294967296;
-    };
-}
-
-export function makeSeededRandom(seed: number): () => number {
-    let state = (seed >>> 0) || 1;
-    return () => {
         state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
         return state / 4294967296;
     };
@@ -100,14 +77,6 @@ export function getDefaultEmulatorWeights(): string {
     return path.join(getRepoRoot(), "src", "weights", "truck_emulator_weights");
 }
 
-export function hiddenActivation(name: HiddenActivationName): ActivationFunction {
-    return name == "logistic" ? new Sigmoid() : new Tanh();
-}
-
-export function outputActivation(name: OutputMapName): ActivationFunction {
-    return name == "2s-1" ? new SymmetricSigmoid() : new Tanh();
-}
-
 export function makeOptimizer(options: OptimizerOptions): () => Optimizer {
     if (options.name == "sgd") {
         return () => new SGD(options.learningRate);
@@ -121,41 +90,20 @@ export function describeOptimizer(options: OptimizerOptions): string {
         : "SGDNesterovMomentum(" + options.learningRate + ", " + options.momentum + ")";
 }
 
-/**
- * The controller net, shaped from the options rather than hardcoded: the demo's
- * 4-45-1 tanh, the paper's 4-9-1 logistic with a 2s-1 output, its 3-7-1 and its
- * 8-17-1 are all the same net with different arguments.
- */
+export function makeSeededRandom(seed: number): () => number {
+    return seededRandom(seed);
+}
+
 export function buildControllerNet(net: NetOptions, optimizer: OptimizerOptions): NeuralNet {
-    let hiddenLayer: LayerConfig = {
-        neuronCount: net.hidden,
-        weightInitializer: new TwoLayerInitializer(0.7, net.hidden),
-        unitConstructor: (weights: number, activation: ActivationFunction, initialWeightRange: WeightInitializer, opt: Optimizer) =>
-            new AdalineUnit(weights, activation, initialWeightRange, opt),
-        activation: hiddenActivation(net.activation)
-    };
-    let outputLayer: LayerConfig = {
-        neuronCount: 1,
-        weightInitializer: new RandomWeightInitializer(0.01),
-        unitConstructor: (weights: number, activation: ActivationFunction, initialWeightRange: WeightInitializer, opt: Optimizer) =>
-            new AdalineUnit(weights, activation, initialWeightRange, opt),
-        activation: outputActivation(net.outputMap)
-    };
-    let config: NetConfig = {
-        inputs: net.inputs,
-        optimizer: makeOptimizer(optimizer),
-        errorFunction: new MSE(), // ignored for the controller
-        layerConfigs: [hiddenLayer, outputLayer]
-    };
-    return new NeuralNet(config);
+    return buildNet(net, makeOptimizer(optimizer));
 }
 
 export function netShape(net: NetOptions): number[] {
-    return [net.inputs, net.hidden, 1];
+    return shapeOf(net);
 }
 
 export function buildObservation(net: NetOptions): Observation {
-    return observationForInputCount(net.inputs, 4);
+    return buildObs(net);
 }
 
 export function buildObjective(name: ObjectiveName, dock: Dock): ControllerError {
@@ -201,18 +149,26 @@ export function describeObjective(name: ObjectiveName): string[] {
     ];
 }
 
+/** One hidden width, or several separated by commas for a deeper net. */
+export function parseHiddenLayers(value: string): number[] {
+    let hidden = value.split(",").map((part) => Number.parseInt(part.trim()));
+    for (let i = 0; i < hidden.length; i++) {
+        if (!isFinite(hidden[i]) || hidden[i] < 1) {
+            throw new Error("--hidden must be one or more whole numbers of at least 1, got \"" + value + "\"");
+        }
+    }
+    return hidden;
+}
+
 export function parseNetOptions(args: Args): NetOptions {
     let net: NetOptions = {
         inputs: args.integer("inputs", 4),
-        hidden: args.integer("hidden", 45),
+        hidden: parseHiddenLayers(args.string("hidden", "45")),
         activation: args.choice<HiddenActivationName>("activation", ["tanh", "logistic"], "tanh"),
         outputMap: args.choice<OutputMapName>("output-map", ["tanh", "2s-1"], "tanh")
     };
     // fails here rather than deep inside a backward pass
     observationForInputCount(net.inputs, 4);
-    if (net.hidden < 1) {
-        throw new Error("--hidden must be at least 1");
-    }
     return net;
 }
 
@@ -232,76 +188,27 @@ export function parseConventions(args: Args): PlantConventions {
     );
 }
 
-export function parseStartOptions(args: Args, defaultScheme: StartSchemeName): StartOptions {
+export function parseStartOptions(args: Args, defaultScheme: StartSchemeName | "curriculum"): StartOptions {
     return {
-        scheme: args.choice<StartSchemeName>("starts", ["curriculum", "ensemble", "point", "yard"], defaultScheme),
+        scheme: args.choice<StartSchemeName | "curriculum">("starts", ["curriculum", "ensemble", "point", "yard"], defaultScheme),
         seed: args.integer("start-seed", 7),
         count: args.integer("start-count", 100)
     };
 }
 
-/**
- * The paper's fixed training set: five trailer orientations at each of three
- * positions. Cabin and trailer start aligned.
- */
-export function ensembleStarts(): Start[] {
-    let positions = [[100, 0], [80, 50], [80, -50]];
-    let orientations = [-90, -30, 0, 30, 90];
-    let starts: Start[] = [];
-    for (let p = 0; p < positions.length; p++) {
-        for (let o = 0; o < orientations.length; o++) {
-            let angle = toRad(orientations[o]);
-            starts.push({
-                x: positions[p][0], y: positions[p][1],
-                trailerAngle: angle, cabinAngle: angle,
-                scheme: "ensemble", idx: p * orientations.length + o
-            });
-        }
-    }
-    return starts;
-}
-
-/** The paper's single training point, (20, 10, -2). */
-export function pointStarts(): Start[] {
-    return [{ x: 20, y: 10, trailerAngle: -2, cabinAngle: -2, scheme: "point", idx: 0 }];
-}
-
-/** Seeded uniform draws over the far yard, so that toy can draw the same ones. */
-export function yardStarts(count: number, seed: number): Start[] {
-    let random = makeSeededRandom(seed);
-    let starts: Start[] = [];
-    for (let i = 0; i < count; i++) {
-        let angle = -Math.PI + random() * 2 * Math.PI;
-        starts.push({
-            x: 50 + random() * 50,
-            y: -50 + random() * 100,
-            trailerAngle: angle, cabinAngle: angle,
-            scheme: "yard", idx: i
-        });
-    }
-    return starts;
-}
-
 export function buildStarts(options: StartOptions): Start[] {
-    if (options.scheme == "ensemble") {
-        return ensembleStarts();
+    if (options.scheme == "curriculum") {
+        throw new Error("The curriculum draws its starts from lesson bounds and has no fixed start list");
     }
-    if (options.scheme == "point") {
-        return pointStarts();
-    }
-    if (options.scheme == "yard") {
-        return yardStarts(options.count, options.seed);
-    }
-    throw new Error("The curriculum draws its starts from lesson bounds and has no fixed start list");
+    return buildStartSet(options.scheme, options.count, options.seed);
 }
 
 export function applyStart(truck: Truck, start: Start): void {
-    truck.setTruckPosition(new Point(start.x, start.y), start.trailerAngle, start.cabinAngle);
+    applyStartToTruck(truck, start);
 }
 
 export function describeStart(start: Start): string {
-    return "(" + start.x.toFixed(1) + ", " + start.y.toFixed(1) + ") trailer "
-        + toDeg(start.trailerAngle).toFixed(0) + " deg, cabin " + toDeg(start.cabinAngle).toFixed(0) + " deg";
+    return describeStartState(start);
 }
 
 export function readJson(file: string): any {

@@ -4,12 +4,16 @@ import { Truck, NormalizedTruck } from '../model/truck';
 import { Dock, TraceEventType } from '../model/world';
 import { NeuralNet } from '../neuralnet/net';
 import { Observation } from '../neuralnet/observation';
-import { traceBundleFormat, dockingD2, RunOutcome } from '../model/traceBundle';
+import { traceBundleFormat, RunOutcome } from '../model/traceBundle';
+import {
+    RolloutOptions, RunResult, Start as ReplayStart, buildBundle, describePlant, prepareReplay, rollOut
+} from '../model/replay';
 import { Args } from './args';
 import { Sidecar, buildSidecarPlant, netOptionsFromSidecar, conventionsFromSidecar, bundleDockRef } from './sidecar';
 import {
     NetOptions, Start, applyStart, buildControllerNet, buildObservation, buildStarts, describeStart,
-    getRepoCommit, netShape, parseConventions, parseNetOptions, parseStartOptions, readJson, writeJson
+    getRepoCommit, netShape, parseConventions, parseHiddenLayers, parseNetOptions, parseStartOptions,
+    readJson, writeJson
 } from './setup';
 
 export const rolloutFlags = ["quiet"];
@@ -44,143 +48,6 @@ export const rolloutUsage = [
     "  --activation, --output-map, --r, --dock-ref and --wrap override them."
 ].join("\n");
 
-const columns = ["signal", "u", "x", "y", "tc", "ts", "clamped", "step"];
-
-interface Row {
-    step: number;
-    signal: number;
-    u: number;
-    x: number;
-    y: number;
-    tc: number;
-    ts: number;
-    clamped: number;
-}
-
-interface RunResult {
-    rows: Row[];
-    outcome: RunOutcome;
-    bestD2: number;
-    bestStep: number;
-    terminalD2: number;
-    clampCount: number;
-    pathLen: number;
-}
-
-function round(value: number): number {
-    return Math.round(value * 1e9) / 1e9;
-}
-
-/**
- * Drives one episode and records it. Termination comes from the plant itself --
- * the same dock and validity checks the interactive simulation uses, read off
- * its trace events -- except for the yard bound and the step cap, which are the
- * rollout's own.
- */
-function rollOut(truck: Truck, plant: NormalizedTruck, net: NeuralNet, observation: Observation,
-    start: Start, stepCap: number, yardXMax: number, yardYAbs: number): RunResult {
-    applyStart(truck, start);
-    truck.consumeTraceEvents(); // discard anything from positioning
-
-    let rows: Row[] = [];
-    let outcome: RunOutcome = "cap";
-    let bestD2 = Infinity;
-    let bestStep = 0;
-    let clampCount = 0;
-    let pathLen = 0;
-    let previous = new Point(start.x, start.y);
-    let maxSteeringAngle = truck.getMaxSteeringAngle();
-    // the paper's own ensemble starts sit exactly on the yard's y bound, so the
-    // bound only ends a run once that run has been inside the yard; one which
-    // never comes back in reaches the step cap instead
-    let enteredYard = false;
-
-    for (let step = 1; step <= stepCap; step++) {
-        let signal = net.forward(observation.observe(plant.getStateVector())).entries[0];
-        let clampedSignal = Math.min(Math.max(-1, signal), 1);
-        let canContinue = truck.nextState(signal, 1);
-
-        let position = truck.getTrailerEndPosition();
-        let row: Row = {
-            step: step,
-            signal: round(signal),
-            u: round(maxSteeringAngle * clampedSignal),
-            x: round(position.x),
-            y: round(position.y),
-            tc: round(truck.getTruckAngle()),
-            ts: round(truck.getTrailerAngle()),
-            clamped: truck.isJackKnifed() ? 1 : 0
-        };
-        rows.push(row);
-        if (row.clamped) {
-            clampCount++;
-        }
-        pathLen += Math.sqrt(Math.pow(position.x - previous.x, 2) + Math.pow(position.y - previous.y, 2));
-        previous = new Point(position.x, position.y);
-
-        let d2 = dockingD2(position.x, position.y, truck.getTrailerAngle());
-        if (d2 < bestD2) {
-            bestD2 = d2;
-            bestStep = step;
-        }
-
-        if (!canContinue) {
-            outcome = outcomeFromEvents(truck);
-            break;
-        }
-        let outsideYard = position.x > yardXMax || Math.abs(position.y) > yardYAbs;
-        if (!outsideYard) {
-            enteredYard = true;
-        } else if (enteredYard) {
-            outcome = "bound";
-            break;
-        }
-    }
-
-    let last = rows[rows.length - 1];
-    return {
-        rows: rows,
-        outcome: outcome,
-        bestD2: round(bestD2),
-        bestStep: bestStep,
-        terminalD2: last ? round(dockingD2(last.x, last.y, last.ts)) : NaN,
-        clampCount: clampCount,
-        pathLen: round(pathLen)
-    };
-}
-
-function outcomeFromEvents(truck: Truck): RunOutcome {
-    let events = truck.consumeTraceEvents();
-    // the last termination event is the one which ended the episode
-    for (let i = events.length - 1; i >= 0; i--) {
-        if (events[i].type == TraceEventType.DOCKED) {
-            return "docked";
-        }
-        if (events[i].type == TraceEventType.HIT_DOCK_WALL) {
-            return "wall";
-        }
-        if (events[i].type == TraceEventType.LEFT_AREA) {
-            return "bound";
-        }
-    }
-    // the plant refused to move without saying why, which means it started invalid
-    return "wall";
-}
-
-function strideRows(rows: Row[], stride: number, bestStep: number): Row[] {
-    if (stride <= 1 || rows.length == 0) {
-        return rows;
-    }
-    let keep: Row[] = [];
-    for (let i = 0; i < rows.length; i++) {
-        // the last and best-approach rows are always kept, as the format requires
-        if (i % stride == 0 || i == rows.length - 1 || rows[i].step == bestStep) {
-            keep.push(rows[i]);
-        }
-    }
-    return keep;
-}
-
 export function runRollout(args: Args): void {
     let weightsFile = args.string("weights", "");
     let outFile = args.string("out", "");
@@ -204,7 +71,7 @@ export function runRollout(args: Args): void {
         conventions = conventionsFromSidecar(sidecar);
         // anything given explicitly still wins over the sidecar
         net.inputs = args.integer("inputs", net.inputs);
-        net.hidden = args.integer("hidden", net.hidden);
+        net.hidden = args.has("hidden") ? parseHiddenLayers(args.string("hidden", "")) : net.hidden;
         net.activation = args.choice("activation", ["tanh", "logistic"], net.activation);
         net.outputMap = args.choice("output-map", ["tanh", "2s-1"], net.outputMap);
         conventions.stepLength = args.number("r", conventions.stepLength);
@@ -230,15 +97,11 @@ export function runRollout(args: Args): void {
         throw new Error("--starts curriculum has no fixed start list; use ensemble, point or yard");
     }
 
-    let dock = new Dock(new Point(0, 0));
-    let truck = new Truck(new Point(50, 0), 0, 0, dock, []);
-    truck.conventions = conventions;
-    let plant = new NormalizedTruck(truck);
-    let controllerNet = buildControllerNet(net, { name: "sgd", learningRate: 0, momentum: 0 });
-    controllerNet.loadWeights(readJson(weightsFile));
-    controllerNet.fixWeights(true); // a rollout never learns, so store no inputs
-    let observation = buildObservation(net);
+    let prepared = prepareReplay(net, conventions, readJson(weightsFile));
+    let truck = prepared.truck;
+    let observation = prepared.observation;
     let starts = buildStarts(startOptions);
+    let options: RolloutOptions = { stepCap: stepCap, yardXMax: yardXMax, yardYAbs: yardYAbs };
 
     console.log("arm            " + arm);
     console.log("net            " + netShape(net).join("-") + " " + net.activation
@@ -251,37 +114,20 @@ export function runRollout(args: Args): void {
     console.log("sidecar        " + (sidecar ? sidecarFile : "none, options taken from the command line"));
     console.log("");
 
-    let runs: any[] = [];
     let counts: { [outcome: string]: number } = { docked: 0, wall: 0, bound: 0, cap: 0 };
     let bestD2Sum = 0;
     let minBestD2 = Infinity;
     let stepSum = 0;
+    let results: RunResult[] = [];
 
     for (let i = 0; i < starts.length; i++) {
         let start = starts[i];
-        let result = rollOut(truck, plant, controllerNet, observation, start, stepCap, yardXMax, yardYAbs);
+        let result = rollOut(truck, prepared.plant, prepared.controllerNet, observation, start, options);
+        results.push(result);
         counts[result.outcome] = (counts[result.outcome] || 0) + 1;
         bestD2Sum += result.bestD2;
         minBestD2 = Math.min(minBestD2, result.bestD2);
         stepSum += result.rows.length;
-
-        let kept = strideRows(result.rows, stride, result.bestStep);
-        runs.push({
-            id: i,
-            start: {
-                x: round(start.x), y: round(start.y),
-                ts: round(start.trailerAngle), tc: round(start.cabinAngle),
-                scheme: start.scheme, idx: start.idx
-            },
-            end: result.outcome,
-            steps: result.rows.length,
-            best_d2: result.bestD2,
-            best_step: result.bestStep,
-            terminal_d2: result.terminalD2,
-            clamp_count: result.clampCount,
-            path_len: result.pathLen,
-            trace: kept.map((row) => [row.signal, row.u, row.x, row.y, row.tc, row.ts, row.clamped, row.step])
-        });
         if (!quiet) {
             console.log("run " + i + "  " + describeStart(start) + "  -> " + result.outcome
                 + " after " + result.rows.length + " steps, best d2 " + result.bestD2.toFixed(3)
@@ -289,22 +135,15 @@ export function runRollout(args: Args): void {
         }
     }
 
-    let bundle = {
-        format: traceBundleFormat,
-        provenance: {
-            arm: arm,
-            engine: "truck_backer_upper",
-            engine_git: getRepoCommit(),
-            weights: path.basename(weightsFile),
-            train_seed: sidecar ? sidecar.seed : undefined,
-            net: { shape: netShape(net), activation: net.activation, output_map: net.outputMap, obs: net.inputs },
-            objective: sidecar ? sidecar.objective.name : "unknown",
-            sidecar: sidecar ? sidecar : undefined
-        },
-        plant: buildSidecarPlant(truck, stepCap),
-        columns: columns,
-        runs: runs
-    };
+    let bundle = buildBundle({
+        arm: arm,
+        engine: "truck_backer_upper",
+        engineGit: getRepoCommit(),
+        weights: path.basename(weightsFile),
+        trainSeed: sidecar ? sidecar.seed : undefined,
+        objective: sidecar ? sidecar.objective.name : "unknown",
+        sidecar: sidecar ? sidecar : undefined
+    }, truck, net, options, starts, results, stride);
     writeJson(outFile, bundle);
 
     console.log("");
