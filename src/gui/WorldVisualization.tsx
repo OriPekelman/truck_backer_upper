@@ -8,6 +8,7 @@ import { TruckTrailerVisualization } from './TruckTrailerVisualization'
 import { WheelVisualization } from './WheelVisualization'
 import { StraightLineVisualization } from './StraightLineVisualization'
 
+import { TraceVisualization } from './TraceVisualization'
 import { DockVisualization } from './DockVisualization'
 import { CoordinateSystemTransformation } from './CoordinateSystemTransformation'
 import { Vector } from '../math'
@@ -16,6 +17,8 @@ interface WorldVisualizationProps {
     world: World,
     onObjectMoved: (translation: Point) => void
     draggable: boolean
+    showTrace?: boolean
+    showTraceOutlines?: boolean
 }
 
 export default class WorldVisualization extends React.Component<WorldVisualizationProps, {}> {
@@ -70,6 +73,7 @@ export default class WorldVisualization extends React.Component<WorldVisualizati
                 <Layer>
                     {limitVis}
                     <DockVisualization cordSystemTransformer={cst} dock={this.props.world.dock} canvasWidth={this.canvasWidth} canvasHeight={this.canvasHeight} />
+                    <TraceVisualization cordSystemTransformer={cst} traces={this.props.world.getTraces()} showPaths={this.props.showTrace !== false} showOutlines={this.props.showTraceOutlines === true} />
                     {movableObjectVisualization}
                 </Layer>
             </Stage>

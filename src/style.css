@@ -58,3 +58,45 @@
     padding-left: 0.5rem !important;
     padding-right: 0.5rem !important;
 }
+.trace-legend {
+    padding: 0.25rem 0 0.5rem 0;
+    font-size: 0.9em;
+}
+
+.trace-legend-toggle {
+    margin-right: 1rem;
+    margin-bottom: 0;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.trace-legend-toggle input {
+    vertical-align: middle;
+}
+
+.trace-legend-toggle span {
+    margin-left: 0.35rem;
+}
+
+.trace-legend-entry {
+    margin-right: 1rem;
+    white-space: nowrap;
+    color: #555;
+}
+
+.trace-legend-line {
+    display: inline-block;
+    width: 18px;
+    height: 0;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+    border-top-width: 2px;
+}
+
+.trace-legend-trailer {
+    border-top: 2px solid #d9534f;
+}
+
+.trace-legend-cabin {
+    border-top: 2px dashed #337ab7;
+}

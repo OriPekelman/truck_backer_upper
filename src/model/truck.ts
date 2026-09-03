@@ -1,13 +1,13 @@
 import { Point, scale, minus, plus, Vector, Angle, getAngle, calculateVector, rotate, StraightLine, isLeftOf } from '../math'
 import * as nnMath from '../neuralnet/math' // TODO: union math libraries..
-import { Dock, AngleType, HasState, Limitable, HasLength } from './world'
+import { Dock, AngleType, HasState, Limitable, HasLength, Traceable } from './world'
 import { TruckLesson } from '../neuralnet/lesson';
 
 import { Emulator } from '../neuralnet/emulator';
 import { Normalized } from '../model/world';
 import * as math from '../math';
 
-export class NormalizedTruck implements Normalized, HasState, Limitable, HasLength {
+export class NormalizedTruck implements Normalized, HasState, Limitable, HasLength, Traceable {
     public constructor(private truck: Truck) {
 
     }
@@ -20,6 +20,14 @@ export class NormalizedTruck implements Normalized, HasState, Limitable, HasLeng
 
     public getLength() {
         return this.truck.getLength();
+    }
+
+    public getTracePoints(): math.Point[] {
+        return this.truck.getTracePoints();
+    }
+
+    public getTraceOutlines(): math.Point[][] {
+        return this.truck.getTraceOutlines();
     }
     public setLimits(limits: StraightLine[]) {
         this.truck.setLimits(limits);
@@ -60,7 +68,7 @@ export class NormalizedTruck implements Normalized, HasState, Limitable, HasLeng
 }
 
 
-export class Truck implements HasState, Limitable, HasLength {
+export class Truck implements HasState, Limitable, HasLength, Traceable {
     public velocity = 1; // m/sec
     public maxSteeringAngle = Math.PI / 180 * 70 // 70 degree
     public trailerLength = 14;
@@ -185,6 +193,22 @@ export class Truck implements HasState, Limitable, HasLength {
 
     public getTrailerEndPosition(): Point {
         return this.tep;
+    }
+
+    /**
+     * Reference points whose path is drawn as a trace: the end of the trailer
+     * (the point which has to reach the dock) and the front of the cabin.
+     * Copies are returned since the trailer end position is mutated in place.
+     */
+    public getTracePoints(): Point[] {
+        return [new Point(this.tep.x, this.tep.y), this.getCabinFrontPosition()];
+    }
+
+    /**
+     * Cabin & trailer boxes, for the box trace as shown in the original paper.
+     */
+    public getTraceOutlines(): Point[][] {
+        return [this.getTruckCorners(), this.getTrailerCorners()];
     }
 
     public getCouplingDevicePosition(): Point {

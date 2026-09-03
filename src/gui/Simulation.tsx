@@ -22,6 +22,8 @@ interface SimulationState {
     isDriving: boolean;
     cabAngle: number;
     trailerAngle: number;
+    showTrace: boolean;
+    showTraceOutlines: boolean;
 }
 
 export class Simulation extends React.Component<SimulationProps, SimulationState> {
@@ -43,7 +45,9 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
             simulationSpeed: 4,
             isDriving: false,
             cabAngle: cabAngle,
-            trailerAngle: trailerAngle
+            trailerAngle: trailerAngle,
+            showTrace: true,
+            showTraceOutlines: false
         };
     }
 
@@ -113,6 +117,7 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
 
     private handleSetRandomPosition() {
         this.state.world.movableObject.randomizePosition();
+        this.state.world.startNewTrace();
         //        this.forceUpdate();
         console.log("New Random position: ");
         console.log("Cab Angle: ", toDeg(this.props.object.getTruckAngle()));
@@ -175,6 +180,7 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
                 toRad(this.state.trailerAngle),
                 toRad(this.state.trailerAngle + this.state.cabAngle)
             )
+            this.state.world.startNewTrace();
             this.forceUpdate();
         }
     }
@@ -203,7 +209,21 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
         tep.x += translation.x;
         tep.y += translation.y;
         this.props.object.setTruckPosition(tep, truck.getTrailerAngle(), truck.getTruckAngle());
+        this.state.world.startNewTrace();
         this.forceUpdate();
+    }
+
+    private handleClearTrace() {
+        this.state.world.clearTrace();
+        this.forceUpdate();
+    }
+
+    private handleShowTraceChanged(e: React.ChangeEvent<HTMLInputElement>) {
+        this.setState({ showTrace: e.currentTarget.checked });
+    }
+
+    private handleShowTraceOutlinesChanged(e: React.ChangeEvent<HTMLInputElement>) {
+        this.setState({ showTraceOutlines: e.currentTarget.checked });
     }
 
     public handleStopDriving() {
@@ -224,7 +244,21 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
                 <div className="row">
                     <div className="col-sm-6 pad">
                         <div className="col-sm-12 panel panel-default">
-                            <WorldVisualization draggable={!this.state.isDriving} world={this.state.world} onObjectMoved={this.handlePositionChange.bind(this)} />
+                            <WorldVisualization draggable={!this.state.isDriving} world={this.state.world} showTrace={this.state.showTrace} showTraceOutlines={this.state.showTraceOutlines} onObjectMoved={this.handlePositionChange.bind(this)} />
+                            <div className="trace-legend">
+                                <label className="trace-legend-toggle">
+                                    <input type="checkbox" checked={this.state.showTrace} onChange={this.handleShowTraceChanged.bind(this)} />
+                                    <span>Show trace</span>
+                                </label>
+                                <span className="trace-legend-entry"><span className="trace-legend-line trace-legend-trailer"></span>End of trailer</span>
+                                <span className="trace-legend-entry"><span className="trace-legend-line trace-legend-cabin"></span>Front of cabin</span>
+                            </div>
+                            <div className="trace-legend">
+                                <label className="trace-legend-toggle">
+                                    <input type="checkbox" checked={this.state.showTraceOutlines} onChange={this.handleShowTraceOutlinesChanged.bind(this)} />
+                                    <span>Show boxes (as in the paper)</span>
+                                </label>
+                            </div>
                         </div>
                     </div>
                     <div className="col-sm-6 pad">
@@ -244,6 +278,7 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
                                     <button type="button" className="btn btn-warning" onClick={this.handleSetRandomPosition.bind(this)}>Random Position</button>
                                     <button type="button" className="btn btn-primary" disabled={!this.props.controller || this.state.isDriving} onClick={this.handleDriveController.bind(this)}>Drive using Controller</button>
                                     <button type="button" className="btn btn-danger" disabled={!this.state.isDriving} onClick={this.handleStopDriving.bind(this)}>Stop</button>
+                                    <button type="button" className="btn btn-default" onClick={this.handleClearTrace.bind(this)}>Clear Trace</button>
                                 </div>
                                 <h3>Truck Orientation</h3>
                                 <div className="alert alert-info">
