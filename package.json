@@ -22,7 +22,6 @@
   },
   "dependencies": {
     "@types/bootstrap": "^3.3.39",
-    "@types/heapdump": "^0.3.1",
     "@types/highcharts": "^5.0.4",
     "@types/jquery": "^3.2.11",
     "@types/rc-slider": "^8.2.3",
@@ -30,7 +29,6 @@
     "@types/react-dom": "^16.0.5",
     "ajv": "^6.5.0",
     "bootstrap": "^3.3.7",
-    "heapdump": "^0.3.9",
     "highcharts": "^5.0.14",
     "jquery": "^3.3.1",
     "konva": "^2.1.3",
