@@ -2,7 +2,13 @@
 
 This repository contains the [Truck Backer Upper demonstration project](http://www-isl.stanford.edu/~widrow/papers/j1990neuralnetworks.pdf) for the lecture “Neural Networks” at the [Interactive Systems Lab (ISL)](http://isl.anthropomatik.kit.edu/english/) at the [Karlsruhe Institute of Technology](https://kit.edu).
 
-This demo runs completely client-side in the browser. The `index.html` file in the `gh-pages` branch can be opened on a local webserver (`python3 -m http.server`). [A hosted version is available here](https://tifu.github.io/truck_backer_upper/).
+This demo runs completely client-side in the browser. [A hosted version of upstream is available here](https://tifu.github.io/truck_backer_upper/).
+
+This fork is the frontend for the `dfa-for-dynamic-control` arc: the plant and the
+arms live in `OriPekelman/toy`, and what this repository contributes is seeing how
+a controller drives. Alongside the original demo it has a rollout overlay for
+comparing arms over the same start states, selectable plant conventions, and a
+headless CLI.
 
 ## Development
 
@@ -17,13 +23,24 @@ An alternative is [Atom](https://atom.io/) + [atom-typescript](https://atom.io/p
 ## Setup
 
 ```bash
-git checkout gh-pages # to set upstream
-git checkout master
-git worktree add bin gh-pages
 npm install
+npm run build          # or npm run watch to rebuild on every change
 ```
 
-Then build via ```npm run build``` or ```npm run prod-build``` and open the `index.html` in the `bin` directory.
+The build writes into `bin/`, which is untracked. Serve it on a local webserver
+and open `index.html`:
+
+```bash
+cd bin && python3 -m http.server 8000
+```
+
+`npm run build-prod` produces the minified build.
+
+Upstream builds into a `gh-pages` worktree (`git worktree add bin gh-pages`), so
+that `bin/` is a checked-in publishable branch. This fork has no `gh-pages`
+branch and does not use that scheme: `bin/` is plain build output, and publishing
+is a separate concern. To publish the current build somewhere, copy the contents
+of `bin/` there; nothing in the build depends on it being a worktree.
 
 ## Headless CLI
 
@@ -58,6 +75,14 @@ All three are selectable, in the simulation's "Plant Conventions" panel and as
 CLI arguments, and default to what the bundled weights were trained under. See
 `src/model/conventions.ts`.
 
-## Updating binaries
+## Layout
 
-Use `cd bin; git add -A; git commit -m'update binaries'; git push` to update the binaries.
+- `src/model` -- the plant: the truck's kinematics, the world, the selectable
+  conventions, and the reader for `tbu-traces/1` rollout bundles.
+- `src/neuralnet` -- nets, layers, activations, optimizers, the two controller
+  trainers and the error functions.
+- `src/gui` -- React components: the interactive simulation, the emulator and
+  controller tabs, and the rollout overlay with its comparison tables.
+- `src/cli` -- the headless `tbu` CLI.
+- `src/train` -- the original standalone training scripts.
+- `src/weights` -- the bundled emulator and controller weights.
