@@ -6,6 +6,7 @@ import { plus, minus, calculateVector, scale } from '../math'
 import { TruckVisualization } from './TruckVisualization'
 import { TrailerVisualization } from './TrailerVisualization'
 import { CouplingDeviceVisualization } from './CouplingDeviceVisualization'
+import { DockReferenceVisualization } from './DockReferenceVisualization'
 import { BoxVisualization } from './BoxVisualization'
 import { WheelVisualization } from './WheelVisualization'
 import { Point } from '../math';
@@ -73,6 +74,7 @@ export class TruckTrailerVisualization extends React.Component<TruckTrailerVisua
             <TruckVisualization cordSystemTransformer={this.props.cordSystemTransformer} truck={this.props.truck} wheelOffset={0.2} />
             <TrailerVisualization cordSystemTransformer={this.props.cordSystemTransformer} truck={this.props.truck} wheelOffset={0.2} />
             <CouplingDeviceVisualization cordSystemTransformer={this.props.cordSystemTransformer} truck={this.props.truck} />
+            <DockReferenceVisualization cordSystemTransformer={this.props.cordSystemTransformer} truck={this.props.truck} />
         </Group>
     }
 }

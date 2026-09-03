@@ -2,6 +2,7 @@ import { Point, scale, minus, plus, Vector, Angle, getAngle, calculateVector, ro
 import * as nnMath from '../neuralnet/math' // TODO: union math libraries..
 import { Dock, AngleType, HasState, Limitable, HasLength, Traceable, TraceEvent, TraceEventType } from './world'
 import { TruckLesson } from '../neuralnet/lesson';
+import { PlantConventions } from './conventions';
 
 import { Emulator } from '../neuralnet/emulator';
 import { Normalized } from '../model/world';
@@ -73,7 +74,8 @@ export class NormalizedTruck implements Normalized, HasState, Limitable, HasLeng
 
 
 export class Truck implements HasState, Limitable, HasLength, Traceable {
-    public velocity = 1; // m/sec
+    // the conventions this demo and the paper disagree on, see PlantConventions
+    public conventions: PlantConventions = PlantConventions.demo();
     public maxSteeringAngle = Math.PI / 180 * 70 // 70 degree
     public trailerLength = 14;
     public cabinLength = 6;
@@ -89,6 +91,11 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
 
     public getLength() {
         return this.getTruckLength() + this.getTrailerLength();
+    }
+
+    /** r, the distance covered per step. */
+    public get velocity(): number {
+        return this.conventions.stepLength;
     }
 
     public constructor(private tep: Point, private trailerAngle: Angle, private cabinAngle: Angle, private dock: Dock, private limits: Array<StraightLine> = []) {
@@ -248,13 +255,24 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
         return plus(cdp, cabinDirection);
     }
 
+    /**
+     * The point which has to reach the dock, per the conventions in force. The
+     * visualisation draws it, so which point a run is judged on is visible.
+     */
+    public getDockReferencePoint(): Point {
+        if (this.conventions.dockReference == "trailerEnd") {
+            return new Point(this.tep.x, this.tep.y);
+        }
+        return this.getEndOfTruck();
+    }
+
     public getEndOfTruck(): Point {
         let cabinDirection = rotate(new Vector(1, 0), this.cabinAngle);
         return plus(this.getCouplingDevicePosition(), cabinDirection.scale(2 / cabinDirection.getLength()));
     }
 
     public getCabTrailerAngle(): Angle {
-        return Math.abs(this.trailerAngle - this.cabinAngle);
+        return Math.abs(this.fixAngle(this.trailerAngle - this.cabinAngle));
     }
 
     public nextTimeStep(steeringSignal: number, time: number) {
@@ -280,7 +298,7 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
     }
 
     private continue(): boolean {
-        let distanceVector = this.getEndOfTruck().getVectorTo(this.dock.position);
+        let distanceVector = this.getDockReferencePoint().getVectorTo(this.dock.position);
         // less than 10cm distance is acceptable
         let result = !(Math.abs(distanceVector.x) < 0.1 && Math.abs(distanceVector.y) < 0.1);
         return result;
@@ -298,7 +316,8 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
         this.cabinAngle += Math.asin(this.velocity * time * Math.sin(steeringAngle) / (this.trailerLength + this.cabinLength))
 
         // adjust cabinangle, s. t. getCabTrailerAngle <= 90 degrees (Math.PI / 2)
-        let diff = this.trailerAngle - this.cabinAngle;
+        // on the shortest difference, so that wrapped angles compare correctly
+        let diff = this.fixAngle(this.trailerAngle - this.cabinAngle);
         let jackKnifed = false;
         if (diff < - Math.PI / 2) {
             this.cabinAngle = this.trailerAngle + Math.PI / 2
@@ -313,6 +332,14 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
             this.addTraceEvent(TraceEventType.JACK_KNIFE, this.getCouplingDevicePosition());
         }
         this.jackKnifed = jackKnifed;
+
+        if (this.conventions.wrapping == "pi") {
+            // wrap the trailer and carry the cab along, so that the clamped
+            // difference between the two is preserved exactly
+            let cabinOffset = this.cabinAngle - this.trailerAngle;
+            this.trailerAngle = this.fixAngle(this.trailerAngle);
+            this.cabinAngle = this.fixAngle(this.trailerAngle + cabinOffset);
+        }
 
         return this.isTruckInValidPosition();
     }

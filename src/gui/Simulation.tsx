@@ -7,6 +7,7 @@ import { TrainController } from '../neuralnet/train'
 import { Point } from '../math'
 import { Truck } from '../model/truck';
 import { Dock } from '../model/world';
+import { PlantConventions, DockReference, AngleWrapping } from '../model/conventions';
 import Slider from 'rc-slider';
 
 
@@ -24,6 +25,7 @@ interface SimulationState {
     trailerAngle: number;
     showTrace: boolean;
     showTraceOutlines: boolean;
+    conventions: PlantConventions;
 }
 
 export class Simulation extends React.Component<SimulationProps, SimulationState> {
@@ -47,7 +49,8 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
             cabAngle: cabAngle,
             trailerAngle: trailerAngle,
             showTrace: true,
-            showTraceOutlines: false
+            showTraceOutlines: false,
+            conventions: this.props.object.conventions.copy()
         };
     }
 
@@ -213,6 +216,78 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
         this.forceUpdate();
     }
 
+    /**
+     * The conventions live on the plant; the state only mirrors them so that
+     * the controls re-render.
+     */
+    private applyConventions(conventions: PlantConventions) {
+        this.props.object.conventions = conventions;
+        this.setState({ conventions: conventions.copy() });
+    }
+
+    private handleDockReferenceChanged(dockReference: DockReference) {
+        let conventions = this.state.conventions.copy();
+        conventions.dockReference = dockReference;
+        this.applyConventions(conventions);
+    }
+
+    private handleWrappingChanged(wrapping: AngleWrapping) {
+        let conventions = this.state.conventions.copy();
+        conventions.wrapping = wrapping;
+        this.applyConventions(conventions);
+    }
+
+    private handleStepLengthChanged(e: React.FocusEvent<HTMLInputElement>) {
+        let stepLength = Number.parseFloat(e.currentTarget.value);
+        if (!isFinite(stepLength) || stepLength <= 0) {
+            return;
+        }
+        let conventions = this.state.conventions.copy();
+        conventions.stepLength = stepLength;
+        this.applyConventions(conventions);
+    }
+
+    private getConventionSettings() {
+        let conventions = this.state.conventions;
+        let disabled = this.state.isDriving;
+        return <div className="form-group">
+            <div className="alert alert-info">
+                Where this demo and Schoenauer &amp; Ronald's paper disagree. The bundled
+                controller weights were trained under the demo's settings.
+            </div>
+            <div className="row mb w-100">
+                <div className="col-6"><label className="float-left">Dock reference point</label></div>
+                <div className="col-6">
+                    <label className="trace-legend-toggle"><input type="radio" disabled={disabled} checked={conventions.dockReference == "truckEnd"} onChange={() => this.handleDockReferenceChanged("truckEnd")} /><span>End of truck (demo)</span></label>
+                    <label className="trace-legend-toggle"><input type="radio" disabled={disabled} checked={conventions.dockReference == "trailerEnd"} onChange={() => this.handleDockReferenceChanged("trailerEnd")} /><span>Rear of trailer (paper, and what the error term grades)</span></label>
+                </div>
+            </div>
+            <div className="row mb w-100">
+                <div className="col-6"><label className="float-left">Angle wrapping</label></div>
+                <div className="col-6">
+                    <label className="trace-legend-toggle"><input type="radio" disabled={disabled} checked={conventions.wrapping == "none"} onChange={() => this.handleWrappingChanged("none")} /><span>None (demo &amp; paper)</span></label>
+                    <label className="trace-legend-toggle"><input type="radio" disabled={disabled} checked={conventions.wrapping == "pi"} onChange={() => this.handleWrappingChanged("pi")} /><span>Wrap into (-180°, 180°] after each step</span></label>
+                </div>
+            </div>
+            <div className="form-inline">
+                <div className="row mb w-100">
+                    <div className="col-6">
+                        <label className="float-left">Step length r (paper: 3)</label>
+                    </div>
+                    <div className="col-6">
+                        <input key={conventions.stepLength} defaultValue={"" + conventions.stepLength} type="text" disabled={disabled} onBlur={(e) => this.handleStepLengthChanged(e)} className="form-control ml float-right" />
+                    </div>
+                </div>
+            </div>
+            <div className="row w-100">
+                <div className="col-12 btn-toolbar float-right">
+                    <button type="button" className="btn btn-secondary" disabled={disabled || conventions.equals(PlantConventions.demo())} onClick={() => this.applyConventions(PlantConventions.demo())}>Demo defaults</button>
+                    <button type="button" className="btn btn-secondary" disabled={disabled || conventions.equals(PlantConventions.paper())} onClick={() => this.applyConventions(PlantConventions.paper())}>Paper defaults</button>
+                </div>
+            </div>
+        </div>
+    }
+
     private handleClearTrace() {
         this.state.world.clearTrace();
         this.forceUpdate();
@@ -252,6 +327,7 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
                                 </label>
                                 <span className="trace-legend-entry"><span className="trace-legend-line trace-legend-trailer"></span>End of trailer</span>
                                 <span className="trace-legend-entry"><span className="trace-legend-line trace-legend-cabin"></span>Front of cabin</span>
+                                <span className="trace-legend-entry"><span className="trace-legend-marker trace-legend-dockref"></span>Dock reference</span>
                             </div>
                             <div className="trace-legend">
                                 <label className="trace-legend-toggle">
@@ -291,6 +367,8 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
                                     Drag & Drop the truck to change its position, then set the angles here. Cabin Angle must be less than +/- 90 degrees
                                 </div>
                                 {this.getTruckAngleSettings()}
+                                <h3>Plant Conventions</h3>
+                                {this.getConventionSettings()}
                             </div>
                         </div>
                     </div>

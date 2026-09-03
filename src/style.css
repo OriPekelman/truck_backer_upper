@@ -211,3 +211,10 @@
 .bundleRunDetails {
     margin-top: 0.75rem;
 }
+
+.trace-legend-dockref {
+    width: 9px;
+    height: 9px;
+    border: 1.5px solid #d9534f;
+    border-radius: 50%;
+}
