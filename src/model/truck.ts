@@ -154,6 +154,11 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
         return this.cabinLength
     }
 
+    /** Whether the jack-knife clamp had to take over on the last step. */
+    public isJackKnifed(): boolean {
+        return this.jackKnifed;
+    }
+
     public getLastSteeringAngle() {
         return this.lastSteeringAngle;
     }

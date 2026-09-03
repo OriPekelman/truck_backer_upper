@@ -4,11 +4,19 @@ import { Vector } from './math'
 import { Angle, Point } from '../math'
 import { TruckLesson } from './lesson'
 import { ENGINE_METHOD_ALL } from 'constants';
-import { ControllerError } from './error';
+import { ControllerError, usesBestApproachGrading, BestApproachError } from './error';
+import { Observation, FullObservation } from './observation';
 import { emulatorNet } from './implementations';
 import { Emulator } from './emulator';
 
 export type MaxStepListener = (steps: number) => void;
+
+/**
+ * Positions the plant for one training sample. Must be deterministic in the
+ * sample index: grading the closest approach replays the same episode, so
+ * asking twice for the same sample has to give the same start.
+ */
+export type StartProvider = (sampleIndex: number) => void;
 
 export class TrainTruckEmulator {
     private lastError: number = 0;
@@ -97,8 +105,28 @@ export class TrainController {
     public emulatorInputs: any = [];
     private currentLesson: TruckLesson | null = null;
     private maxStepListeners: Set<MaxStepListener> = new Set<MaxStepListener>();
+    // how the plant's state reaches the controller's inputs
+    private observation: Observation = new FullObservation();
+    // where each sample starts; the lesson's own randomization when unset
+    private startProvider: StartProvider | null = null;
 
     public constructor(private world: World, private realPlant: HasState, private controllerNet: NeuralNet, private emulatorNet: Emulator | null, private errorFunction: ControllerError) {
+    }
+
+    /**
+     * Sets the input set the controller sees. The plant's state is unchanged;
+     * only what the net is shown, and where its input gradient goes back to.
+     */
+    public setObservation(observation: Observation) {
+        this.observation = observation;
+    }
+
+    public getObservation(): Observation {
+        return this.observation;
+    }
+
+    public setStartProvider(startProvider: StartProvider | null) {
+        this.startProvider = startProvider;
     }
 
     public setEmulatorNet(emulator: Emulator) {
@@ -134,7 +162,7 @@ export class TrainController {
     public predict(): number {
         let currentState = this.realPlant.getStateVector();
         this.controllerNet.fixWeights(true); // do not safe input in units
-        let controllerSignal = this.controllerNet.forward(currentState);
+        let controllerSignal = this.controllerNet.forward(this.observation.observe(currentState));
         return controllerSignal.entries[0];
     }
 
@@ -166,7 +194,6 @@ export class TrainController {
         if (!this.currentLesson) {
             throw new Error("You have to set the current lesson before calling this function!");
         }
-        console.log("training step");
         this.prepareTruckPosition();
         let error = this.trainStep();
         this.lastTrainedLesson = this.currentLesson;
@@ -179,7 +206,44 @@ export class TrainController {
     }
 
     private prepareTruckPosition() {
+        if (this.startProvider) {
+            this.startProvider(this.performedTrainSteps);
+            return;
+        }
         this.realPlant.randomizePosition(this.currentLesson as TruckLesson);
+    }
+
+    /**
+     * Rolls the episode out once without training, to find the step at which
+     * the controller came closest, then puts the plant back at the same start
+     * so that the training pass can stop there. Returns 0 when the start was
+     * already the closest point, i.e. when there is nothing to learn from.
+     */
+    private measureBestApproachStep(maxSteps: number): number {
+        if (!this.startProvider) {
+            throw new Error("Grading the closest approach needs a start provider, \
+                so that the episode can be replayed up to it");
+        }
+        let errorFunction = this.errorFunction as any as BestApproachError;
+        this.controllerNet.fixWeights(true); // do not record inputs for this pass
+        let bestScore = errorFunction.scoreState(this.realPlant.getStateVector());
+        let bestStep = 0;
+        let steps = 0;
+        let canContinue = true;
+        while (canContinue && steps < maxSteps) {
+            let observed = this.observation.observe(this.realPlant.getStateVector());
+            let steeringSignal = this.controllerNet.forward(observed).entries[0];
+            canContinue = this.realPlant.nextState(steeringSignal, 1);
+            steps++;
+            let score = errorFunction.scoreState(this.realPlant.getStateVector());
+            if (score < bestScore) {
+                bestScore = score;
+                bestStep = steps;
+            }
+        }
+        this.controllerNet.fixWeights(false);
+        this.startProvider(this.performedTrainSteps);
+        return bestStep;
     }
 
     private fixEmulator(fix: boolean) {
@@ -210,13 +274,23 @@ export class TrainController {
 
         let outputState = this.realPlant.getOriginalState();
 
+        let maxSteps = (this.currentLesson as TruckLesson).maxSteps;
+        // -1 grades the state the episode stopped in, as it always has
+        let gradeAtStep = -1;
+        if (usesBestApproachGrading(this.errorFunction)) {
+            gradeAtStep = this.measureBestApproachStep(maxSteps);
+            if (gradeAtStep == 0) {
+                return NaN; // the start was the closest approach
+            }
+        }
+
         // start at current state
         let positions = [];
         while (canContinue) {
             let currentState = this.realPlant.getStateVector();
             positions.push(this.realPlant.getOriginalState());
 
-            let controllerSignal = this.controllerNet.forward(currentState);
+            let controllerSignal = this.controllerNet.forward(this.observation.observe(currentState));
 
             let steeringSignal = controllerSignal.entries[0];
 
@@ -230,7 +304,7 @@ export class TrainController {
             currentState = this.realPlant.getStateVector();
             outputState = this.realPlant.getOriginalState();
 
-            if (canContinue && i + 1 >= (this.currentLesson as TruckLesson).maxSteps) {
+            if (gradeAtStep < 0 && canContinue && i + 1 >= maxSteps) {
                 this.informListeners(i);
                 this.controllerNet.clearInputs();
                 this.emulatorNet.clearInputs();
@@ -239,6 +313,9 @@ export class TrainController {
                 return 0;
             }
             i++;
+            if (gradeAtStep > 0 && i >= gradeAtStep) {
+                break; // grade the closest approach rather than the last state
+            }
         }
         let realState = this.realPlant.getStateVector();
 
@@ -263,7 +340,10 @@ export class TrainController {
 
             let steeringSignalDerivative = emulatorDerivative.entries[emulatorDerivative.entries.length - 1]; // last entry
 
-            controllerDerivative = this.controllerNet.backwardWithGradient(new Vector([steeringSignalDerivative]), true);
+            let observationDerivative = this.controllerNet.backwardWithGradient(new Vector([steeringSignalDerivative]), true);
+            // the controller's input gradient is in observation space, the
+            // emulator's in state space; both are gradients wrt the same state
+            controllerDerivative = this.observation.mapGradient(observationDerivative, emulatorDerivative.entries.length - 1);
 
             // get the error from the emulator and add it to the input error for the controller
             // remove the last element

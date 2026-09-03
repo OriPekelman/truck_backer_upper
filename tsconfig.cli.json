@@ -1,0 +1,10 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "outDir": "./cli-build",
+        "sourceMap": false
+    },
+    "files": [
+        "src/cli/tbu.ts"
+    ]
+}

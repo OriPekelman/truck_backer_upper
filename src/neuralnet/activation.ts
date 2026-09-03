@@ -38,6 +38,26 @@ export class Sigmoid extends ActivationFunction {
     }
 }
 
+/**
+ * The paper's output mapping: a logistic unit's (0, 1) rescaled to the
+ * steering signal's [-1, 1] as 2 * sigma(x) - 1.
+ */
+export class SymmetricSigmoid extends ActivationFunction {
+
+    getName() {
+        return "2s-1";
+    }
+
+    apply(input: Scalar) {
+        return 2 / (1 + Math.exp(-input)) - 1;
+    }
+
+    applyDerivative(input: Scalar) {
+        let sigma = 1 / (1 + Math.exp(-input));
+        return 2 * sigma * (1 - sigma);
+    }
+}
+
 export class ReLu extends ActivationFunction {
 
     public constructor(private epsilon: number) {
