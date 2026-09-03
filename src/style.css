@@ -218,3 +218,26 @@
     border: 1.5px solid #d9534f;
     border-radius: 50%;
 }
+
+.metricsSection {
+    margin-top: 1rem;
+}
+
+.metricsSection h4 {
+    font-size: 1.1rem;
+    margin-top: 1rem;
+}
+
+.metricsSortable {
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+}
+
+.metricsSortable:hover {
+    background-color: #f2f2f2;
+}
+
+.metricsRow {
+    cursor: pointer;
+}

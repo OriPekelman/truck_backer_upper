@@ -2,6 +2,9 @@ import * as React from 'react'
 import { toDeg } from '../math'
 import { LoadedBundle, LoadedRun, RunOutcome, runOutcomes, parseTraceBundle, traceBundleFormat } from '../model/traceBundle'
 import { TraceOverlay, DisplayRun, RunRef, sameRun } from './TraceOverlay'
+import { MetricsTable, MetricsRow } from './MetricsTable'
+import { metricsToCsv, runToCsv, runToJson, download } from './exportRuns'
+import { runMetrics } from '../model/metrics'
 
 type ColorMode = "arm" | "outcome";
 type FieldFilter = "all" | "far" | "near";
@@ -111,6 +114,84 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
             }
         }
         return display;
+    }
+
+    /**
+     * The runs the filters let through, paired with the bundle they came from.
+     * Selecting a run isolates it on the yard but leaves the tables whole:
+     * a comparison which collapses to the row you just clicked is no use.
+     */
+    private get metricsRows(): MetricsRow[] {
+        let rows: MetricsRow[] = [];
+        for (let bundleIndex = 0; bundleIndex < this.state.bundles.length; bundleIndex++) {
+            let bundle = this.state.bundles[bundleIndex];
+            for (let runIndex = 0; runIndex < bundle.runs.length; runIndex++) {
+                let run = bundle.runs[runIndex];
+                if (!this.isVisible(run)) {
+                    continue;
+                }
+                rows.push({
+                    ref: { bundleIndex: bundleIndex, runIndex: runIndex },
+                    bundle: bundle,
+                    run: run,
+                    color: this.state.colorMode == "arm"
+                        ? armColors[bundleIndex % armColors.length]
+                        : outcomeColors[run.outcome]
+                });
+            }
+        }
+        return rows;
+    }
+
+    /** Each loaded bundle with the runs of it which pass the filters. */
+    private get visibleByBundle(): { bundle: LoadedBundle, runs: LoadedRun[], color: string }[] {
+        return this.state.bundles.map((bundle, index) => ({
+            bundle: bundle,
+            runs: bundle.runs.filter((run) => this.isVisible(run)),
+            color: armColors[index % armColors.length]
+        })).filter((entry) => entry.runs.length > 0);
+    }
+
+    private handleExportMetrics() {
+        download("tbu-metrics.csv", "text/csv", metricsToCsv(this.metricsRows));
+    }
+
+    private handleExportRun(asJson: boolean) {
+        let rows = this.metricsRows;
+        let selected = this.state.selected;
+        let row = rows.filter((entry) => sameRun(entry.ref, selected))[0];
+        if (!row) {
+            return;
+        }
+        let name = "tbu-" + row.bundle.provenance.arm + "-run" + row.run.id;
+        if (asJson) {
+            download(name + ".json", "application/json", runToJson(row.bundle, row.run));
+        } else {
+            download(name + ".csv", "text/csv", runToCsv(row.bundle, row.run));
+        }
+    }
+
+    private renderExports() {
+        let hasSelection = this.state.selected != undefined;
+        return <div className="bundleControls">
+            <span className="bundleControlGroup">
+                <strong>Export</strong>
+                <button type="button" className="btn btn-sm btn-outline-secondary mr" onClick={this.handleExportMetrics.bind(this)}>
+                    per-run metrics (CSV)
+                </button>
+                <button type="button" className="btn btn-sm btn-outline-secondary mr" disabled={!hasSelection} onClick={() => this.handleExportRun(false)}>
+                    selected run, per step (CSV)
+                </button>
+                <button type="button" className="btn btn-sm btn-outline-secondary" disabled={!hasSelection} onClick={() => this.handleExportRun(true)}>
+                    selected run, per step (JSON)
+                </button>
+            </span>
+            <span className="bundleHint">
+                {hasSelection
+                    ? "The per-step export carries the weights, conventions and start in its header, for diffing against the same run from another engine."
+                    : "Select a run to export its per-step trace for a cross-engine diff."}
+            </span>
+        </div>
     }
 
     /** Changes whenever the drawn set of paths changes, not on every scrub step. */
@@ -434,6 +515,9 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
                     onSelect={(ref) => this.setState({ selected: ref })} />
                 {this.state.bundles.length > 0 ? this.renderScrub(displayRuns.length) : null}
                 {this.renderRunDetails(focused)}
+                {this.state.bundles.length > 0 ? this.renderExports() : null}
+                <MetricsTable rows={this.metricsRows} bundles={this.visibleByBundle}
+                    selected={this.state.selected} onSelect={(ref) => this.setState({ selected: ref })} />
             </div>
         </div>
     }
