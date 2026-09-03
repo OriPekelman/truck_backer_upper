@@ -131,3 +131,83 @@
     background-color: #5cb85c;
     border-radius: 50%;
 }
+
+.bundleDropZone {
+    border: 2px dashed #ccc;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    text-align: center;
+}
+
+.bundleHint {
+    color: #777;
+    font-size: 0.9em;
+    margin: 0.5rem 0 0 0;
+}
+
+.bundleTable {
+    font-size: 0.85em;
+}
+
+.bundleTable td, .bundleTable th {
+    vertical-align: middle !important;
+}
+
+.bundleSwatch {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}
+
+.bundleControls, .bundleScrub {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 0.5rem;
+    font-size: 0.9em;
+}
+
+.bundleControlGroup {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 1.5rem;
+}
+
+.bundleControlGroup strong {
+    margin-right: 0.5rem;
+}
+
+.bundleSelect {
+    display: inline-block;
+    width: auto;
+    margin-right: 0.75rem;
+}
+
+.bundleScrub > * {
+    margin-right: 0.75rem;
+}
+
+.bundleTimeSlider {
+    flex: 1 1 200px;
+    min-width: 150px;
+}
+
+.bundleStepLabel {
+    color: #555;
+    white-space: nowrap;
+}
+
+.traceOverlay {
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    max-width: 100%;
+    cursor: crosshair;
+}
+
+.bundleRunDetails {
+    margin-top: 0.75rem;
+}

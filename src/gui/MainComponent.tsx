@@ -8,6 +8,7 @@ import { NeuralNet } from '../neuralnet/net';
 import { TrainController } from '../neuralnet/train';
 import { Truck, NormalizedTruck } from '../model/truck';
 import { HowItWorks } from './HowItWorks';
+import { TraceBundleView } from './TraceBundleView';
 
 export interface MainComponentState {
     emulatorNet: NeuralNet | undefined;
@@ -70,6 +71,9 @@ export class MainComponent extends React.Component<{}, MainComponentState> {
                         <li className="nav-item">
                             <a className="nav-link" data-toggle="tab" href="#controller">Step 2: Controller</a>
                         </li>
+                        <li className="nav-item">
+                            <a className="nav-link" data-toggle="tab" href="#rollouts">Rollout overlay</a>
+                        </li>
                     </ul>
 
                     <div className="tab-content">
@@ -79,6 +83,9 @@ export class MainComponent extends React.Component<{}, MainComponentState> {
                         </div>
                         <div className="tab-pane container" id="controller">
                             <Controller onControllerTrained={this.onControllerNetChanged.bind(this)} emulatorNet={this.state.emulatorNet} world={controllerWorld} object={controllerTruck} />
+                        </div>
+                        <div className="tab-pane container" id="rollouts">
+                            <TraceBundleView />
                         </div>
                     </div>
                 </div>
