@@ -1,6 +1,6 @@
 import { Point, scale, minus, plus, Vector, Angle, getAngle, calculateVector, rotate, StraightLine, isLeftOf } from '../math'
 import * as nnMath from '../neuralnet/math' // TODO: union math libraries..
-import { Dock, AngleType, HasState, Limitable, HasLength, Traceable } from './world'
+import { Dock, AngleType, HasState, Limitable, HasLength, Traceable, TraceEvent, TraceEventType } from './world'
 import { TruckLesson } from '../neuralnet/lesson';
 
 import { Emulator } from '../neuralnet/emulator';
@@ -28,6 +28,10 @@ export class NormalizedTruck implements Normalized, HasState, Limitable, HasLeng
 
     public getTraceOutlines(): math.Point[][] {
         return this.truck.getTraceOutlines();
+    }
+
+    public consumeTraceEvents(): TraceEvent[] {
+        return this.truck.consumeTraceEvents();
     }
     public setLimits(limits: StraightLine[]) {
         this.truck.setLimits(limits);
@@ -75,6 +79,13 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
     public cabinLength = 6;
     private lastSteeringAngle: Angle = 0;
     private limited = true;
+    // events waiting to be picked up by a trace; capped since nothing drains
+    // them while training drives the truck outside of a World
+    private static maxPendingTraceEvents = 64;
+    private pendingTraceEvents: TraceEvent[] = [];
+    // whether the jack-knife clamp was already active in the last step, so that
+    // being pinned against it is marked once instead of every step
+    private jackKnifed = false;
 
     public getLength() {
         return this.getTruckLength() + this.getTrailerLength();
@@ -144,6 +155,7 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
         this.tep = tep;
         this.trailerAngle = this.fixAngle(trailerAngle)
         this.cabinAngle = this.fixAngle(cabinAngle)
+        this.jackKnifed = false;
     }
 
     public getTrailerLength(): number {
@@ -211,6 +223,19 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
         return [this.getTruckCorners(), this.getTrailerCorners()];
     }
 
+    public consumeTraceEvents(): TraceEvent[] {
+        let events = this.pendingTraceEvents;
+        this.pendingTraceEvents = [];
+        return events;
+    }
+
+    private addTraceEvent(type: TraceEventType, position: Point): void {
+        if (this.pendingTraceEvents.length >= Truck.maxPendingTraceEvents) {
+            this.pendingTraceEvents.shift();
+        }
+        this.pendingTraceEvents.push(new TraceEvent(type, new Point(position.x, position.y)));
+    }
+
     public getCouplingDevicePosition(): Point {
         let truckDirection = rotate(new Vector(1, 0), this.trailerAngle).scale(this.trailerLength);
         let cdp = plus(this.tep, truckDirection)
@@ -240,7 +265,14 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
         if (!this.limited || this.isTruckInValidPosition()) {
             //this.truck.nextTimeStep(steeringSignal);        
             this.drive(steeringSignal, time);
-            let result = this.isTruckInValidPosition() && this.continue();
+            let valid = this.isTruckInValidPosition();
+            let result = valid && this.continue();
+            if (!valid) {
+                // isTruckNotAtDock() still holding means the area was left instead
+                this.addTraceEvent(this.isTruckNotAtDock() ? TraceEventType.LEFT_AREA : TraceEventType.HIT_DOCK_WALL, this.tep);
+            } else if (!result) {
+                this.addTraceEvent(TraceEventType.DOCKED, this.getEndOfTruck());
+            }
             return result;
         } else {
             return false;
@@ -267,13 +299,20 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
 
         // adjust cabinangle, s. t. getCabTrailerAngle <= 90 degrees (Math.PI / 2)
         let diff = this.trailerAngle - this.cabinAngle;
+        let jackKnifed = false;
         if (diff < - Math.PI / 2) {
             this.cabinAngle = this.trailerAngle + Math.PI / 2
             this.lastSteeringAngle = 0
+            jackKnifed = true;
         } else if (diff > Math.PI / 2) { // this means, that trailerAngle is too big compared to cabinAngle =>
             this.cabinAngle = this.trailerAngle - Math.PI / 2;
             this.lastSteeringAngle = 0
+            jackKnifed = true;
         }
+        if (jackKnifed && !this.jackKnifed) {
+            this.addTraceEvent(TraceEventType.JACK_KNIFE, this.getCouplingDevicePosition());
+        }
+        this.jackKnifed = jackKnifed;
 
         return this.isTruckInValidPosition();
     }

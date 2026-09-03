@@ -68,13 +68,17 @@ export default class WorldVisualization extends React.Component<WorldVisualizati
         }
 
         let movableObjectVisualization = this.visualizeMovableObject(this.props.world.movableObject, cst);
+        let traces = this.props.world.getTraces();
+        let showPaths = this.props.showTrace !== false;
+        let showOutlines = this.props.showTraceOutlines === true;
         return <div id={"stageContainer" + this.id}>
             <Stage scaleX={1} scaleY={1} width={this.canvasWidth} height={this.canvasHeight} className="drawingArea">
                 <Layer>
                     {limitVis}
                     <DockVisualization cordSystemTransformer={cst} dock={this.props.world.dock} canvasWidth={this.canvasWidth} canvasHeight={this.canvasHeight} />
-                    <TraceVisualization cordSystemTransformer={cst} traces={this.props.world.getTraces()} showPaths={this.props.showTrace !== false} showOutlines={this.props.showTraceOutlines === true} />
+                    <TraceVisualization cordSystemTransformer={cst} traces={traces} showPaths={showPaths} showOutlines={showOutlines} showEvents={false} />
                     {movableObjectVisualization}
+                    <TraceVisualization cordSystemTransformer={cst} traces={traces} showPaths={false} showOutlines={false} showEvents={showPaths || showOutlines} />
                 </Layer>
             </Stage>
         </div>

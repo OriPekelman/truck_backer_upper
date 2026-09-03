@@ -1,8 +1,8 @@
 import * as React from 'react'
-import { Group, Line, Circle } from 'react-konva'
+import { Group, Line, Circle, RegularPolygon } from 'react-konva'
 import { CoordinateSystemTransformation } from './CoordinateSystemTransformation'
 import { BoxVisualization } from './BoxVisualization'
-import { Trace } from '../model/world'
+import { Trace, TraceEvent, TraceEventType } from '../model/world'
 import { Point } from '../math'
 
 interface TraceVisualizationProps {
@@ -10,6 +10,9 @@ interface TraceVisualizationProps {
     cordSystemTransformer: CoordinateSystemTransformation
     showPaths: boolean
     showOutlines: boolean
+    // event markers sit on the object's current position when an episode ends,
+    // so they are drawn in a second pass on top of the object itself
+    showEvents: boolean
 }
 
 interface TraceStyle {
@@ -25,11 +28,32 @@ const traceStyles: TraceStyle[] = [
 
 const outlineColor = "#8a8a8a";
 
+interface EventStyle {
+    fill: string
+    // number of corners of the marker, 0 for a circle
+    sides: number
+    rotation: number
+}
+
+// the clamp and the two terminations end an episode without showing up in its
+// terminal error, so each gets a marker of its own
+const eventStyles: { [type: number]: EventStyle } = {
+    [TraceEventType.JACK_KNIFE]: { fill: "#f0ad4e", sides: 3, rotation: 0 },
+    [TraceEventType.HIT_DOCK_WALL]: { fill: "#d9534f", sides: 4, rotation: 0 },
+    [TraceEventType.LEFT_AREA]: { fill: "#8e44ad", sides: 4, rotation: 45 },
+    [TraceEventType.DOCKED]: { fill: "#5cb85c", sides: 0, rotation: 0 }
+};
+
+const eventMarkerRadius = 4.5;
+const eventMarkerStroke = "#ffffff";
+
 // trajectories driven earlier are faded out, so the current one stands out
 const currentTraceOpacity = 0.85;
 const pastTraceOpacity = 0.35;
 const currentOutlineOpacity = 0.55;
 const pastOutlineOpacity = 0.25;
+const currentEventOpacity = 1;
+const pastEventOpacity = 0.5;
 
 export class TraceVisualization extends React.Component<TraceVisualizationProps, {}> {
 
@@ -74,6 +98,24 @@ export class TraceVisualization extends React.Component<TraceVisualizationProps,
         return outlineVis;
     }
 
+    private visualizeEvents(events: TraceEvent[]) {
+        let eventVis = [];
+        for (let i = 0; i < events.length; i++) {
+            let event = events[i];
+            let style = eventStyles[event.type];
+            if (!style) {
+                continue;
+            }
+            let position = this.props.cordSystemTransformer.mapIntoNewCordSystem(event.position);
+            if (style.sides == 0) {
+                eventVis.push(<Circle key={i} x={position.x} y={position.y} radius={eventMarkerRadius} fill={style.fill} stroke={eventMarkerStroke} strokeWidth={1} />);
+            } else {
+                eventVis.push(<RegularPolygon key={i} x={position.x} y={position.y} sides={style.sides} radius={eventMarkerRadius} rotation={style.rotation} fill={style.fill} stroke={eventMarkerStroke} strokeWidth={1} />);
+            }
+        }
+        return eventVis;
+    }
+
     public render() {
         let traceVis = [];
         for (let i = 0; i < this.props.traces.length; i++) {
@@ -87,6 +129,11 @@ export class TraceVisualization extends React.Component<TraceVisualizationProps,
             if (this.props.showPaths) {
                 traceVis.push(<Group key={"paths" + i} opacity={isCurrent ? currentTraceOpacity : pastTraceOpacity}>
                     {this.visualizePaths(trace)}
+                </Group>);
+            }
+            if (this.props.showEvents) {
+                traceVis.push(<Group key={"events" + i} opacity={isCurrent ? currentEventOpacity : pastEventOpacity}>
+                    {this.visualizeEvents(trace.events)}
                 </Group>);
             }
         }

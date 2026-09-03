@@ -100,3 +100,34 @@
 .trace-legend-cabin {
     border-top: 2px dashed #337ab7;
 }
+
+.trace-legend-marker {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}
+
+.trace-legend-jackknife {
+    width: 0;
+    height: 0;
+    margin-bottom: 2px;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-bottom: 9px solid #f0ad4e;
+}
+
+.trace-legend-wall {
+    background-color: #d9534f;
+}
+
+.trace-legend-area {
+    background-color: #8e44ad;
+    transform: rotate(45deg);
+}
+
+.trace-legend-docked {
+    background-color: #5cb85c;
+    border-radius: 50%;
+}

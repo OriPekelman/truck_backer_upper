@@ -259,6 +259,12 @@ export class Simulation extends React.Component<SimulationProps, SimulationState
                                     <span>Show boxes (as in the paper)</span>
                                 </label>
                             </div>
+                            <div className="trace-legend">
+                                <span className="trace-legend-entry"><span className="trace-legend-marker trace-legend-jackknife"></span>Jack-knifed</span>
+                                <span className="trace-legend-entry"><span className="trace-legend-marker trace-legend-wall"></span>Hit dock wall</span>
+                                <span className="trace-legend-entry"><span className="trace-legend-marker trace-legend-area"></span>Left area</span>
+                                <span className="trace-legend-entry"><span className="trace-legend-marker trace-legend-docked"></span>Docked</span>
+                            </div>
                         </div>
                     </div>
                     <div className="col-sm-6 pad">

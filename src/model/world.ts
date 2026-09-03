@@ -41,6 +41,32 @@ export interface Traceable {
      * used to draw the box trace. Copies, as for getTracePoints.
      */
     getTraceOutlines(): Point[][];
+
+    /**
+     * Notable events since the last call, which are drained rather than
+     * returned so that each one is recorded on the trajectory exactly once.
+     */
+    consumeTraceEvents(): TraceEvent[];
+}
+
+/**
+ * Events which are worth marking on a trajectory because they end or shape an
+ * episode without being visible in its terminal error.
+ */
+export enum TraceEventType {
+    // the jack-knife clamp (|trailer angle - cabin angle| <= 90 deg) took over
+    JACK_KNIFE,
+    // drove into the dock wall
+    HIT_DOCK_WALL,
+    // left the valid area
+    LEFT_AREA,
+    // reached the dock
+    DOCKED
+}
+
+export class TraceEvent {
+    public constructor(public type: TraceEventType, public position: Point) {
+    }
 }
 
 /**
@@ -53,6 +79,8 @@ export class Trace {
     // outlines of the object sampled along the way; one entry per sample,
     // each holding the polygons of getTraceOutlines()
     public outlines: Point[][][] = [];
+    // notable events which happened along this trajectory
+    public events: TraceEvent[] = [];
     // where the last outline was sampled, to space the samples out
     public lastOutlinePosition: Point | undefined = undefined;
 }
@@ -60,7 +88,8 @@ export class Trace {
 export function isTraceable(obj: any): obj is Traceable {
     return obj != undefined
         && typeof obj.getTracePoints === "function"
-        && typeof obj.getTraceOutlines === "function";
+        && typeof obj.getTraceOutlines === "function"
+        && typeof obj.consumeTraceEvents === "function";
 }
 
 export interface Limitable {
@@ -144,6 +173,11 @@ export class World {
             path.push(points[i]);
         }
         this.recordOutline(traceable, trace, points[0]);
+
+        let events = traceable.consumeTraceEvents();
+        for (let i = 0; i < events.length; i++) {
+            trace.events.push(events[i]);
+        }
     }
 
     private recordOutline(traceable: Traceable, trace: Trace, reference: Point): void {
