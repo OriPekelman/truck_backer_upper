@@ -278,7 +278,7 @@ export class Controller extends React.Component<ControllerProps, ControllerState
         nn.loadWeights(weights);
         let plant = sidecar && sidecar.plant ? sidecar.plant : null;
         let hint = plant
-            ? "trained at r = " + plant.r + ", " + plant.step_cap + "-step episodes, dock reference \"" + plant.dock_ref + "\" — set the Plant Conventions panel to match"
+            ? "trained at r = " + plant.r + ", " + plant.step_cap + "-step episodes, dock reference \"" + plant.dock_ref + "\", angle wrapping \"" + (plant.wrap || "pi") + "\" — set the Plant Conventions panel to match (with the demo's unwrapped angles this controller's inputs leave [-1, 1] and it drives differently)"
             : "no sidecar: assumed " + net.activation + " hidden units and a " + net.outputMap + " output";
         this.setState({
             loadingWeights: false,
