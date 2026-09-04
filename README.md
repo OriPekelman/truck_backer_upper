@@ -66,6 +66,18 @@ defaults, which reproduce the demo's own settings. Training writes a sidecar
 next to the weights recording the commit, the seed and every convention in
 force, and `rollout` reads that sidecar so a rollout matches its training.
 
+## Shipped rollouts
+
+`src/bundles/` holds `tbu-traces/1` bundles produced by the engine
+(OriPekelman/toy, `toy research train truck --load <ctrl> --trace ...`) for the
+controllers from the dfa-vs-bp arc, on start states shared across all of them:
+500 seeded yard starts (seed 2026) and the paper's 15 ensemble starts, for the
+DFA student of the GA controller, the backprop student, and the GA controller
+itself. `src/bundles/index.json` lists them; the "Rollout overlay" tab opens the
+yard bundles when it loads and offers the rest one click away. The DFA
+controller's weights are in `src/weights/imit_dfa_ga_c4.json` with a sidecar,
+so the "Replay" panel can drive it live on any start set.
+
 ## Plant conventions
 
 This code and Schoenauer & Ronald's paper implement the same reformulation of

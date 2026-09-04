@@ -269,3 +269,13 @@ input.replayNumber, input.replayArmInput {
 .bundleControlGroup .bundleStepLabel {
     white-space: nowrap;
 }
+
+.bundlePreloads {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px dashed #ccc;
+    text-align: left;
+}
+.bundlePreload {
+    margin: 4px 0;
+}

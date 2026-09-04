@@ -1,0 +1,15 @@
+{
+  "format": "tbu-preloads/1",
+  "note": "Rollouts produced by toy (OriPekelman/toy, engine ae1e0e0) with `toy research train truck --load <ctrl> --trace ...`: 500 seeded yard starts (trace seed 2026, stride 3) and the paper's 15 ensemble starts, identical across the three controllers. Controllers from dfa-vs-bp C0/C4.",
+  "bundles": [
+    { "file": "bundles/imit_dfa.yard500.json.gz",   "label": "DFA student of the GA controller — 500 yard starts",  "arm": "imit_dfa", "autoload": true,
+      "note": "C4: expert=ga, abundant demos, lr 0.5, B=7, seed 0. Far-yard docking 0.45; this yard 0.584." },
+    { "file": "bundles/imit_bp.yard500.json.gz",    "label": "Backprop student of the GA controller — 500 yard starts", "arm": "imit_bp", "autoload": true,
+      "note": "C4: expert=ga, abundant demos, lr 2, seed 0. Far-yard docking 0.48; this yard 0.578." },
+    { "file": "bundles/ga_teacher.yard500.json.gz", "label": "The GA controller itself (the teacher) — 500 yard starts", "arm": "ga", "autoload": true,
+      "note": "C0: Schoenauer & Ronald's method re-implemented, seed 0; 15/15 ensemble, d² 0.017; this yard 0.586." },
+    { "file": "bundles/imit_dfa.ensemble15.json.gz",   "label": "DFA student — the paper's 15 starts",      "arm": "imit_dfa", "autoload": false, "note": "" },
+    { "file": "bundles/imit_bp.ensemble15.json.gz",    "label": "Backprop student — the paper's 15 starts", "arm": "imit_bp", "autoload": false, "note": "" },
+    { "file": "bundles/ga_teacher.ensemble15.json.gz", "label": "GA controller — the paper's 15 starts",    "arm": "ga",       "autoload": false, "note": "" }
+  ]
+}

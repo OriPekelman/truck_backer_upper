@@ -22,6 +22,17 @@ interface TraceBundleViewState {
     stepsPerSecond: number;
     selected: RunRef | undefined;
     hovered: RunRef | undefined;
+    preloads: PreloadEntry[];
+    preloadBusy: { [file: string]: boolean };
+}
+
+/** One entry of bundles/index.json: a rollout bundle shipped with the page. */
+interface PreloadEntry {
+    file: string;
+    label: string;
+    arm: string;
+    autoload: boolean;
+    note: string;
 }
 
 // one colour per loaded bundle, i.e. per arm
@@ -58,8 +69,30 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
             playing: false,
             stepsPerSecond: 30,
             selected: undefined,
-            hovered: undefined
+            hovered: undefined,
+            preloads: [],
+            preloadBusy: {}
         };
+    }
+
+    /**
+     * Bundles shipped with the page (bundles/index.json, copied by the build
+     * from src/bundles). The ones marked autoload are opened at once, so the
+     * tab shows the deployed controllers on the same start states without a
+     * file to find; the rest are one click away.
+     */
+    public componentDidMount() {
+        fetch("bundles/index.json")
+            .then((r) => r.ok ? r.json() : Promise.reject(new Error("bundles/index.json: " + r.status)))
+            .then((index) => {
+                let entries: PreloadEntry[] = (index && index.bundles) || [];
+                this.setState({ preloads: entries });
+                let auto = entries.filter((e) => e.autoload);
+                if (auto.length > 0) {
+                    this.loadPreloads(auto);
+                }
+            })
+            .catch(() => { /* no shipped bundles: the drop zone is the only loader */ });
     }
 
     public componentWillUnmount() {
@@ -215,12 +248,16 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
             reader.onerror = () => reject(new Error("could not read " + file.name));
             reader.readAsArrayBuffer(file);
         });
-        let bytes = new Uint8Array(buffer);
+        return TraceBundleView.decodeBundleBytes(file.name, new Uint8Array(buffer));
+    }
+
+    /** Plain or gzipped JSON, whichever the bytes are; shared by dropped files and shipped bundles. */
+    private static async decodeBundleBytes(name: string, bytes: Uint8Array): Promise<any> {
         let text: string;
         if (bytes.length > 1 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
             let decompressor = (window as any).DecompressionStream;
             if (!decompressor) {
-                throw new Error(file.name + " is gzipped and this browser has no DecompressionStream; gunzip it first");
+                throw new Error(name + " is gzipped and this browser has no DecompressionStream; gunzip it first");
             }
             let stream = (new Blob([bytes]) as any).stream().pipeThrough(new decompressor("gzip"));
             text = await new Response(stream).text();
@@ -228,6 +265,48 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
             text = new TextDecoder("utf-8").decode(bytes);
         }
         return JSON.parse(text);
+    }
+
+    private async loadPreloads(entries: PreloadEntry[]) {
+        let busy: { [file: string]: boolean } = {};
+        entries.forEach((e) => busy[e.file] = true);
+        this.setState((state) => ({ preloadBusy: Object.assign({}, state.preloadBusy, busy) }));
+        let bundles: LoadedBundle[] = [];
+        let errors: string[] = [];
+        for (let i = 0; i < entries.length; i++) {
+            let entry = entries[i];
+            try {
+                let response = await fetch(entry.file);
+                if (!response.ok) {
+                    throw new Error("HTTP " + response.status);
+                }
+                let bytes = new Uint8Array(await response.arrayBuffer());
+                let raw = await TraceBundleView.decodeBundleBytes(entry.file, bytes);
+                bundles.push(parseTraceBundle(entry.label, raw));
+            } catch (e) {
+                errors.push(entry.file + ": " + (e instanceof Error ? e.message : e));
+            }
+        }
+        this.stopPlaying();
+        this.setState((state) => {
+            let done: { [file: string]: boolean } = {};
+            for (let key in state.preloadBusy) {
+                done[key] = state.preloadBusy[key] && !busy[key];
+            }
+            return {
+                bundles: state.bundles.concat(bundles),
+                errors: state.errors.concat(errors),
+                preloadBusy: done,
+                selected: undefined,
+                hovered: undefined,
+                playing: false,
+                time: 0
+            };
+        });
+    }
+
+    private isPreloaded(entry: PreloadEntry): boolean {
+        return this.state.bundles.some((b) => b.label == entry.label);
     }
 
     private async loadFiles(files: File[]) {
@@ -377,6 +456,30 @@ export class TraceBundleView extends React.Component<{}, TraceBundleViewState> {
             </p>
             <input type="file" multiple accept=".json,.gz,.jsonc,application/json,application/gzip" onChange={this.handleFilesChosen.bind(this)} />
             <p className="bundleHint">One bundle per arm. Load several to compare them on the same start states.</p>
+            {this.renderPreloads()}
+        </div>
+    }
+
+    private renderPreloads() {
+        if (this.state.preloads.length == 0) {
+            return null;
+        }
+        return <div className="bundlePreloads">
+            <p className="mb"><strong>Shipped rollouts</strong> — the controllers from the dfa-vs-bp arc, rolled out by the engine on shared start states:</p>
+            <ul className="list-unstyled">
+                {this.state.preloads.map((entry) => {
+                    let loaded = this.isPreloaded(entry);
+                    let busy = !!this.state.preloadBusy[entry.file];
+                    return <li key={entry.file} className="bundlePreload">
+                        <button type="button" className="btn btn-default btn-xs" disabled={loaded || busy}
+                            onClick={() => this.loadPreloads([entry])}>
+                            {loaded ? "loaded" : busy ? "loading…" : "load"}
+                        </button>
+                        {" "}<code>{entry.arm}</code> {entry.label}
+                        {entry.note ? <span className="text-muted"> — {entry.note}</span> : null}
+                    </li>
+                })}
+            </ul>
         </div>
     }
 
