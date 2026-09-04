@@ -25,10 +25,10 @@
     },
     {
       "file": "bundles/dfa_tb_recipe.yard200.json.gz",
-      "label": "Broadcast DFA, the C6 recipe (no demonstrations; error = (dy, d\u03b8), credit to the best step) \u2014 200 yard starts",
+      "label": "Broadcast DFA \u2014 the C6 recipe with the right B sign (no demonstrations) \u2014 200 yard starts",
       "arm": "dfa_tb",
       "autoload": true,
-      "note": "C6d: 4-9-1, B seed 227935, seed 5; far 0.34, this yard 0.16. The first pure-broadcast DFA that docks; below bptt (0.40), above frozen (0.00)."
+      "note": "C6e: 4-9-1, Gaussian B 1234 (+1: b2_d\u03b8<0, b2_dy>0), far 0.47, this yard 0.56. The strongest pure-broadcast DFA; below bptt (0.40), above frozen (0.00)."
     },
     {
       "file": "bundles/imit_dfa.ensemble15.json.gz",

@@ -2,10 +2,10 @@
   "format": "tbu-controller/1",
   "arm": "dfa_tb",
   "engine": "toy",
-  "engine_git": "ae1e0e0",
+  "engine_git": "18bb4a1",
   "engine_dirty": false,
   "trained_at": "2026-09-04",
-  "seed": 5,
+  "seed": 7,
   "weights": "dfa_tb_recipe_c6d.json",
   "net": {
     "shape": [
@@ -31,11 +31,11 @@
     "descends": "broadcast of the terminal state error (dy, dtheta) through fixed random B, credit stopped at the best-approach step"
   },
   "training": {
-    "experiment": "dfa-vs-bp C6d",
-    "recipe": "TRUCK_E=yt TRUCK_DFA_SUM=to_best, uniform fixed-scale B seed 227935, lr 8.54, clip 1",
+    "experiment": "dfa-vs-bp C6e",
+    "recipe": "TRUCK_E=yt TRUCK_DFA_SUM=to_best, Gaussian inv_sqrt_fan B seed 1234 sign +1 (b2_d\u03b8<0, b2_dy>0), lr 8.54, clip 1",
     "updates": 5000,
-    "eval_far_dock5": 0.171875,
-    "eval_ensemble_mean_d2": 5405.98047881004,
-    "note": "the first pure-broadcast DFA controller that docks on this plant; below bptt (0.40 far), above frozen (0.00)"
+    "eval_far_dock5": 0.46875,
+    "eval_ensemble_mean_d2": 1148.0985478866814,
+    "note": "the strongest pure-broadcast DFA controller found (C6e); below bptt (0.40 far), above frozen (0.00)"
   }
 }

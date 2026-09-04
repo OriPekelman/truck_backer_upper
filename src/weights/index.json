@@ -20,7 +20,7 @@
     {
       "weights": "weights/dfa_tb_recipe_c6d.json",
       "sidecar": "weights/dfa_tb_recipe_c6d.meta.json",
-      "label": "Broadcast DFA \u2014 the C6 recipe, no demonstrations (C6d)"
+      "label": "Broadcast DFA \u2014 the C6 recipe with the right B sign, no demonstrations (C6e)"
     }
   ]
 }
