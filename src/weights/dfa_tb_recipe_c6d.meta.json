@@ -1,0 +1,41 @@
+{
+  "format": "tbu-controller/1",
+  "arm": "dfa_tb",
+  "engine": "toy",
+  "engine_git": "ae1e0e0",
+  "engine_dirty": false,
+  "trained_at": "2026-09-04",
+  "seed": 5,
+  "weights": "dfa_tb_recipe_c6d.json",
+  "net": {
+    "shape": [
+      4,
+      9,
+      1
+    ],
+    "activation": "logistic",
+    "output_map": "2s-1",
+    "obs": 4
+  },
+  "plant": {
+    "ls": 14,
+    "lc": 6,
+    "u_max_deg": 70,
+    "r": 3,
+    "step_cap": 300,
+    "dock_ref": "trailer",
+    "wrap": "pi"
+  },
+  "objective": {
+    "name": "nearest_approach_d2",
+    "descends": "broadcast of the terminal state error (dy, dtheta) through fixed random B, credit stopped at the best-approach step"
+  },
+  "training": {
+    "experiment": "dfa-vs-bp C6d",
+    "recipe": "TRUCK_E=yt TRUCK_DFA_SUM=to_best, uniform fixed-scale B seed 227935, lr 8.54, clip 1",
+    "updates": 5000,
+    "eval_far_dock5": 0.171875,
+    "eval_ensemble_mean_d2": 5405.98047881004,
+    "note": "the first pure-broadcast DFA controller that docks on this plant; below bptt (0.40 far), above frozen (0.00)"
+  }
+}

@@ -24,6 +24,13 @@
       "note": "C0: Schoenauer & Ronald's method re-implemented, seed 0; 15/15 ensemble, d\u00b2 0.017; this yard 0.586."
     },
     {
+      "file": "bundles/dfa_tb_recipe.yard200.json.gz",
+      "label": "Broadcast DFA, the C6 recipe (no demonstrations; error = (dy, d\u03b8), credit to the best step) \u2014 200 yard starts",
+      "arm": "dfa_tb",
+      "autoload": true,
+      "note": "C6d: 4-9-1, B seed 227935, seed 5; far 0.34, this yard 0.16. The first pure-broadcast DFA that docks; below bptt (0.40), above frozen (0.00)."
+    },
+    {
       "file": "bundles/imit_dfa.ensemble15.json.gz",
       "label": "DFA student \u2014 the paper's 15 starts",
       "arm": "imit_dfa",

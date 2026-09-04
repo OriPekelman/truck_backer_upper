@@ -16,6 +16,11 @@
       "weights": "weights/ga_c0_seed0.json",
       "sidecar": "weights/ga_c0_seed0.meta.json",
       "label": "The GA controller itself \u2014 the teacher (C0)"
+    },
+    {
+      "weights": "weights/dfa_tb_recipe_c6d.json",
+      "sidecar": "weights/dfa_tb_recipe_c6d.meta.json",
+      "label": "Broadcast DFA \u2014 the C6 recipe, no demonstrations (C6d)"
     }
   ]
 }
