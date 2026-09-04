@@ -1,0 +1,43 @@
+{
+  "format": "tbu-controller/1",
+  "arm": "imit_bp",
+  "engine": "toy",
+  "engine_git": "74e1746",
+  "engine_dirty": false,
+  "trained_at": "2026-09-03",
+  "seed": 0,
+  "weights": "imit_bp_ga_c4.json",
+  "net": {
+    "shape": [
+      4,
+      9,
+      1
+    ],
+    "activation": "logistic",
+    "output_map": "2s-1",
+    "obs": 4
+  },
+  "plant": {
+    "ls": 14,
+    "lc": 6,
+    "u_max_deg": 70,
+    "r": 3,
+    "step_cap": 300,
+    "dock_ref": "trailer",
+    "wrap": "pi"
+  },
+  "objective": {
+    "name": "imitation",
+    "descends": "per-step MSE against the GA controller's steering"
+  },
+  "training": {
+    "experiment": "dfa-vs-bp C4",
+    "expert": "C0 ga seed 0",
+    "demos": "abundant (2000 yard rollouts)",
+    "lr": 2,
+    "updates": 40000,
+    "eval_far_dock5": 0.484375,
+    "eval_ensemble_mean_d2": 594.3305201896997,
+    "note": "converted from toy's toy-truck-controller/v1 sidecar (kept as .toy.meta.json); see #9"
+  }
+}

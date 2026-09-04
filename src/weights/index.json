@@ -1,0 +1,21 @@
+{
+  "format": "tbu-controllers/1",
+  "note": "Controllers trained in the dfa-vs-bp arc (OriPekelman/toy). Each has a tbu-controller/1 sidecar; the Controller tab can drive any of them in the simulator. All are 4-9-1 logistic with a 2s-1 output, trained at r=3, 300-step episodes, trailer-rear dock.",
+  "controllers": [
+    {
+      "weights": "weights/imit_dfa_ga_c4.json",
+      "sidecar": "weights/imit_dfa_ga_c4.meta.json",
+      "label": "DFA student of the GA controller (C4)"
+    },
+    {
+      "weights": "weights/imit_bp_ga_c4.json",
+      "sidecar": "weights/imit_bp_ga_c4.meta.json",
+      "label": "Backprop student of the GA controller (C4)"
+    },
+    {
+      "weights": "weights/ga_c0_seed0.json",
+      "sidecar": "weights/ga_c0_seed0.meta.json",
+      "label": "The GA controller itself \u2014 the teacher (C0)"
+    }
+  ]
+}

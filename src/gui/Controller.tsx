@@ -18,6 +18,7 @@ import { TruckLesson } from '../neuralnet/lesson';
 import { createTruckControllerLessons } from '../neuralnet/lesson';
 import { LayerConfig } from '../neuralnet/net';
 import { LessonsComponent } from './LessonsComponent'
+import { NetOptions, buildControllerNetConfig, inferNetShape, HiddenActivationName, OutputMapName } from '../model/replay';
 const ReactHighcharts = require('react-highcharts');
 
 interface ControllerProps {
@@ -40,8 +41,19 @@ interface ControllerState {
     lessons: TruckLesson[];
     currentLessonIndex: number;
     weightLessonIndex: number;
+    trainedControllers: TrainedControllerEntry[];
+    selectedTrained: number;
+    loadedTrainedLabel: string | null;
+    trainedHint: string | null;
     loadedLessonWeights: number;
     maxStepErrors: number;
+}
+
+/** One entry of weights/index.json: a controller trained elsewhere, shipped with the page. */
+interface TrainedControllerEntry {
+    weights: string;
+    sidecar: string;
+    label: string;
 }
 
 export class Controller extends React.Component<ControllerProps, ControllerState> {
@@ -71,10 +83,15 @@ export class Controller extends React.Component<ControllerProps, ControllerState
             lessons: createTruckControllerLessons(this.props.object),
             currentLessonIndex: 0,
             weightLessonIndex: Controller.MAX_LESSON,
+            trainedControllers: [],
+            selectedTrained: 0,
+            loadedTrainedLabel: null,
+            trainedHint: null,
             loadedLessonWeights: -1,
             maxStepErrors: 0
         };
         this.handleLoadPretrainedWeights();
+        this.fetchTrainedControllers();
     }
 
     private handleResetLessons() {
@@ -232,6 +249,100 @@ export class Controller extends React.Component<ControllerProps, ControllerState
         }
     }
 
+    /**
+     * Controllers trained outside this page (toy's dfa-vs-bp arc), listed in
+     * weights/index.json with a tbu-controller/1 sidecar each. The sidecar
+     * fixes the net's activation and output mapping, so a logistic 4-9-1 with
+     * a 2s-1 output is driven as it was trained, not as the demo's tanh net.
+     */
+    private fetchTrainedControllers() {
+        fetch("weights/index.json")
+            .then((r) => r.ok ? r.json() : Promise.reject(new Error("" + r.status)))
+            .then((index) => this.setState({ trainedControllers: (index && index.controllers) || [] }))
+            .catch(() => { /* none shipped: the file loader still works */ });
+    }
+
+    private installTrainedController(weights: any, sidecar: any, label: string) {
+        let shape = inferNetShape(weights);
+        let net: NetOptions = {
+            inputs: shape.inputs,
+            hidden: shape.hidden,
+            activation: (sidecar && sidecar.net && sidecar.net.activation == "logistic" ? "logistic" : "tanh") as HiddenActivationName,
+            outputMap: (sidecar && sidecar.net && sidecar.net.output_map == "2s-1" ? "2s-1" : "tanh") as OutputMapName
+        };
+        if (net.inputs != 4) {
+            throw new Error("this controller takes " + net.inputs + " inputs; the simulator observes 4 (x, y, cab angle, trailer angle)");
+        }
+        let config = buildControllerNetConfig(net, () => new SGD(0.8));
+        let nn = new NeuralNet(config);
+        nn.loadWeights(weights);
+        let plant = sidecar && sidecar.plant ? sidecar.plant : null;
+        let hint = plant
+            ? "trained at r = " + plant.r + ", " + plant.step_cap + "-step episodes, dock reference \"" + plant.dock_ref + "\" — set the Plant Conventions panel to match"
+            : "no sidecar: assumed " + net.activation + " hidden units and a " + net.outputMap + " output";
+        this.setState({
+            loadingWeights: false,
+            updatedController: false,
+            nn: nn,
+            network: config,
+            loadWeightsSuccessful: true,
+            loadedTrainedLabel: label + " (" + [net.inputs].concat(net.hidden).concat([1]).join("-") + " " + net.activation + ", " + net.outputMap + ")",
+            trainedHint: hint,
+            errors: [],
+            isTrainedNetwork: false
+        }, () => {
+            let ctrl = this.makeTrainController();
+            if (!ctrl) {
+                alert("Failed to create controller!");
+            } else {
+                this.onControllerTrained(ctrl);
+            }
+        });
+    }
+
+    public handleLoadTrainedController() {
+        let entry = this.state.trainedControllers[this.state.selectedTrained];
+        if (!entry) {
+            return;
+        }
+        Promise.all([fetch(entry.weights).then((r) => r.json()), fetch(entry.sidecar).then((r) => r.ok ? r.json() : null)])
+            .then(([weights, sidecar]) => this.installTrainedController(weights, sidecar, entry.label))
+            .catch((e) => this.setState({ nn: undefined, loadWeightsSuccessful: false, loadedTrainedLabel: null, loadWeightsFailureMsg: "" + e }));
+    }
+
+    /** A weights file, optionally with its sidecar, from disk — e.g. toy's ctrl.json + ctrl.json.meta.json. */
+    public handleTrainedControllerFiles(e: React.ChangeEvent<HTMLInputElement>) {
+        let files: File[] = [];
+        for (let i = 0; e.currentTarget.files && i < e.currentTarget.files.length; i++) {
+            files.push(e.currentTarget.files[i]);
+        }
+        e.currentTarget.value = "";
+        if (files.length == 0) {
+            return;
+        }
+        let read = (file: File) => new Promise<any>((resolve, reject) => {
+            let reader = new FileReader();
+            reader.onload = () => { try { resolve(JSON.parse(reader.result as string)); } catch (err) { reject(new Error(file.name + ": " + err)); } };
+            reader.onerror = () => reject(new Error("could not read " + file.name));
+            reader.readAsText(file);
+        });
+        Promise.all(files.map(read)).then((contents) => {
+            let sidecar = contents.find((c) => c && (c.format === "tbu-controller/1" || ("" + c.schema).indexOf("toy-truck-controller") == 0)) || null;
+            let weights = contents.find((c) => c instanceof Array);
+            if (!weights) {
+                throw new Error("no weights file among " + files.map((f) => f.name).join(", ") + " (expected a JSON array of layers)");
+            }
+            if (sidecar && !sidecar.net && sidecar.schema) {
+                // toy's own sidecar shape: flat fields, sigmoid/logistic naming
+                sidecar = { net: { activation: sidecar.activation == "sigmoid" || sidecar.activation == "logistic" ? "logistic" : "tanh",
+                                   output_map: sidecar.output_map == "2sigma-1" || sidecar.output_map == "2s-1" ? "2s-1" : "tanh" },
+                            plant: { r: sidecar.r, step_cap: sidecar.step_cap, dock_ref: "trailer" } };
+            }
+            let label = files.map((f) => f.name).filter((n) => n.indexOf("meta") < 0)[0] || files[0].name;
+            this.installTrainedController(weights, sidecar, label);
+        }).catch((err) => this.setState({ nn: undefined, loadWeightsSuccessful: false, loadedTrainedLabel: null, loadWeightsFailureMsg: "" + err }));
+    }
+
     public handleLoadPretrainedWeights() {
         let weightName = "truck_emulator_controller_weights_" + this.state.weightLessonIndex;;
         let lessonIndex = this.state.weightLessonIndex;
@@ -252,6 +363,8 @@ export class Controller extends React.Component<ControllerProps, ControllerState
                         nn: neuralNet,
                         network: network,
                         loadWeightsSuccessful: true,
+                        loadedTrainedLabel: null,
+                        trainedHint: null,
                         loadedLessonWeights: lessonIndex,
                         errors: [],
                         isTrainedNetwork: false
@@ -443,13 +556,18 @@ export class Controller extends React.Component<ControllerProps, ControllerState
 
         if (this.state.loadWeightsSuccessful !== null) {
             if (this.state.loadWeightsSuccessful) {
-                alert = <div className="row alert alert-success" role="alert">
-                    <strong>Network for lesson {this.state.loadedLessonWeights} loaded!</strong>
-                </div>
+                alert = this.state.loadedTrainedLabel
+                    ? <div className="row alert alert-success" role="alert">
+                        <strong>Controller loaded: {this.state.loadedTrainedLabel}</strong>
+                        {this.state.trainedHint ? <span> — {this.state.trainedHint}</span> : null}
+                    </div>
+                    : <div className="row alert alert-success" role="alert">
+                        <strong>Network for lesson {this.state.loadedLessonWeights} loaded!</strong>
+                    </div>
             } else {
                 alert = <div className="row alert alert-danger" role="alert">
-                    <strong>Failed to load weights!</strong> Make sure that the network has 4
-                 inputs, 45 neurons in the hidden layer and 3 outputs.<br />{this.state.loadWeightsFailureMsg}
+                    <strong>Failed to load weights!</strong> The demo's nets are 4-45-1 tanh; a trained controller needs a
+                 weights file of nested layers with the bias last, and its sidecar for the activation.<br />{this.state.loadWeightsFailureMsg}
                 </div>
             }
         }
@@ -503,6 +621,22 @@ export class Controller extends React.Component<ControllerProps, ControllerState
                         {lessonOptions}
                     </select>
                     <button type="button" onClick={this.handleLoadPretrainedWeights.bind(this)} disabled={this.state.train} className="btn btn-warning">Load pretrained network</button>
+                </div>
+            </div>
+            <div className="row mb">
+                <div className="form-inline">
+                    <b>Trained controller:</b>
+                    <select className="ml mr select form-control" value={this.state.selectedTrained.toString()}
+                        onChange={(e) => this.setState({ selectedTrained: Number.parseInt(e.currentTarget.value) })}
+                        disabled={this.state.trainedControllers.length == 0}>
+                        {this.state.trainedControllers.length == 0
+                            ? <option value="0">none shipped</option>
+                            : this.state.trainedControllers.map((c, i) => <option key={i} value={i}>{c.label}</option>)}
+                    </select>
+                    <button type="button" onClick={this.handleLoadTrainedController.bind(this)}
+                        disabled={this.state.train || this.state.trainedControllers.length == 0} className="btn btn-warning mr">Drive it in the simulator</button>
+                    <span className="ml">or your own: </span>
+                    <input type="file" multiple accept=".json,application/json" className="ml" onChange={this.handleTrainedControllerFiles.bind(this)} disabled={this.state.train} />
                 </div>
             </div>
             {alert}

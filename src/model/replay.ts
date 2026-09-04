@@ -56,6 +56,11 @@ const makeUnit = (weights: number, activation: ActivationFunction, initialWeight
  * different arguments; nothing here is hardcoded to one of them.
  */
 export function buildControllerNet(net: NetOptions, optimizer: () => Optimizer): NeuralNet {
+    return new NeuralNet(buildControllerNetConfig(net, optimizer));
+}
+
+/** The NetConfig behind buildControllerNet, for callers that also need to show or edit it (the Controller tab). */
+export function buildControllerNetConfig(net: NetOptions, optimizer: () => Optimizer): NetConfig {
     let layerConfigs: LayerConfig[] = net.hidden.map((neurons) => ({
         neuronCount: neurons,
         weightInitializer: new TwoLayerInitializer(0.7, neurons),
@@ -74,7 +79,7 @@ export function buildControllerNet(net: NetOptions, optimizer: () => Optimizer):
         errorFunction: new MSE(), // ignored for the controller
         layerConfigs: layerConfigs
     };
-    return new NeuralNet(config);
+    return config;
 }
 
 export function buildObservation(net: NetOptions): Observation {

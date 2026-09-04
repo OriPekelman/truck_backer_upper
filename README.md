@@ -76,7 +76,12 @@ DFA student of the GA controller, the backprop student, and the GA controller
 itself. `src/bundles/index.json` lists them; the "Rollout overlay" tab opens the
 yard bundles when it loads and offers the rest one click away. The DFA
 controller's weights are in `src/weights/imit_dfa_ga_c4.json` with a sidecar,
-so the "Replay" panel can drive it live on any start set.
+so the "Replay" panel can drive it live on any start set — and the
+"Controller" tab's *Trained controller* row drives any of the shipped
+controllers (`src/weights/index.json`: the DFA student, the backprop student,
+the GA teacher), or a weights file + sidecar of your own, in the interactive
+simulator. Set the Plant Conventions panel to what the sidecar says (r = 3,
+trailer-rear dock) before driving.
 
 ## Plant conventions
 

@@ -1,0 +1,43 @@
+{
+  "format": "tbu-controller/1",
+  "arm": "ga",
+  "engine": "toy",
+  "engine_git": "d2c5800",
+  "engine_dirty": false,
+  "trained_at": "2026-09-03",
+  "seed": 0,
+  "weights": "ga_c0_seed0.json",
+  "net": {
+    "shape": [
+      4,
+      9,
+      1
+    ],
+    "activation": "logistic",
+    "output_map": "2s-1",
+    "obs": 4
+  },
+  "plant": {
+    "ls": 14,
+    "lc": 6,
+    "u_max_deg": 70,
+    "r": 3,
+    "step_cap": 300,
+    "dock_ref": "trailer",
+    "wrap": "pi"
+  },
+  "objective": {
+    "name": "nearest_approach_d2",
+    "descends": "episodic fitness (GA)"
+  },
+  "training": {
+    "experiment": "dfa-vs-bp C0",
+    "pop": 100,
+    "generations": 1500,
+    "aggregation": "mean",
+    "fitness": "reconstructed 1/(eps+d2)/(1+gamma*l)",
+    "eval_far_dock5": 0.453125,
+    "eval_ensemble_mean_d2": 0.01730645278378951,
+    "note": "converted from toy's toy-truck-controller/v1 sidecar (kept as .toy.meta.json); see #9"
+  }
+}
