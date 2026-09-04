@@ -54,8 +54,10 @@ export class NormalizedTruck implements Normalized, HasState, Limitable, HasLeng
         this.truck.randomizePosition(lesson);
     }
 
-    public nextState(steeringSignal: number): boolean {
-        return this.truck.nextState(steeringSignal);
+    public nextState(steeringSignal: number, time: number = 1): boolean {
+        // HasState passes a time step; dropping it here made a normalized plant
+        // ignore sub-steps and always advance by a whole one
+        return this.truck.nextState(steeringSignal, time);
     }
 
     public getOriginalState(): nnMath.Vector {
@@ -119,7 +121,6 @@ export class Truck implements HasState, Limitable, HasLength, Traceable {
     }
 
     public getStateVector(): nnMath.Vector {
-        let cdp = this.getCouplingDevicePosition();
         return new nnMath.Vector([this.tep.x, this.tep.y, this.cabinAngle, this.trailerAngle])
     }
 

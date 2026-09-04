@@ -3,7 +3,6 @@ import { NeuralNet } from './net'
 import { Vector } from './math'
 import { Angle, Point } from '../math'
 import { TruckLesson } from './lesson'
-import { ENGINE_METHOD_ALL } from 'constants';
 import { ControllerError, usesBestApproachGrading, BestApproachError } from './error';
 import { Observation, FullObservation } from './observation';
 import { emulatorNet } from './implementations';
@@ -60,7 +59,7 @@ export class TrainTruckEmulator {
         this.yTrailerError.push(Math.abs(expectedVector.entries[1] - result.entries[1]) * 50);
         this.cabAngleError.push(Math.abs(expectedVector.entries[2] - result.entries[2]) * 180);// * Math.PI * 180 / Math.PI
         if (result.entries.length >= 4) {
-            this.trailerAngleError.push(Math.abs(expectedVector.entries[3] - result.entries[3]) * 50);
+            this.trailerAngleError.push(Math.abs(expectedVector.entries[3] - result.entries[3]) * 180);
         }
         this.lastError = this.neuralNet.getError(result, expectedVector);
 
@@ -248,7 +247,6 @@ export class TrainController {
 
     private fixEmulator(fix: boolean) {
         if (this.emulatorNet && this.fixedEmulator != fix) {
-            0
             this.emulatorNet.setNotTrainable(fix); // do not train emulator
             this.fixedEmulator = fix;
         }

@@ -1,7 +1,6 @@
 import { Vector, Scalar, plus } from './math';
 import { Point } from '../math'
 import { Dock } from '../model/world';
-import { getCiphers } from 'crypto';
 
 export abstract class ErrorFunction {
     abstract getName(): string;
